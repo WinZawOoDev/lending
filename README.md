@@ -42,6 +42,7 @@ Routes: `/accounts/*` → accounts-service, `/loans/*` → loans-service (prefix
 |---|---|---|
 | NestJS | 11.x | Application framework |
 | TypeScript | 5.7.x | Language |
+| Prisma ORM | 7.9 | Database access (PostgreSQL, driver adapter `@prisma/adapter-pg`) |
 | Node.js | 22 (alpine) | Runtime |
 | Jest + Supertest | 30 / 7 | Unit & e2e testing |
 | ESLint + Prettier | 9 / 3 | Linting & formatting |
@@ -102,6 +103,8 @@ Then run each service:
 # accounts-service
 cd accounts-service
 npm install
+npx prisma generate        # regenerate the Prisma client (gitignored)
+npx prisma migrate dev     # apply schema to the database
 npm run start:dev          # watches src/, listens on PORT ?? 3000
 
 # loans-service
@@ -110,6 +113,20 @@ dotnet run                 # http profile on :5120, https on :7004
 ```
 
 Connection strings are already wired in `docker-compose.yml` — when running locally, point the services at `localhost` instead of container hostnames.
+
+## Accounts API
+
+Available through the gateway (`:8080`) or directly (`:3000`):
+
+| Method | Route | Description |
+|---|---|---|
+| POST | `/accounts` | Create an account |
+| GET | `/accounts` | List all accounts |
+| GET | `/accounts/:id` | Get one account |
+| PATCH | `/accounts/:id` | Partially update an account |
+| DELETE | `/accounts/:id` | Delete an account (204) |
+
+Body fields: `name` (string, required), `email` (email, required), `balance` (number ≥ 0, optional).
 
 ## Development Guidelines
 
@@ -123,6 +140,11 @@ Connection strings are already wired in `docker-compose.yml` — when running lo
   ```sh
   nest g resource <name>
   ```
+- Schema changes go through `prisma/schema.prisma` — edit the model, then:
+  ```sh
+  npx prisma migrate dev --name <change>   # create + apply migration
+  ```
+- The generated Prisma client (`src/generated/`) is gitignored — run `npx prisma generate` after install or schema changes.
 - Co-locate unit tests as `<name>.spec.ts` next to the source file.
 - Commands:
   ```sh
@@ -155,7 +177,8 @@ lending/
 │   ├── appsettings.json     # Proxy routes & clusters
 │   └── Dockerfile
 ├── accounts-service/        # NestJS service
-│   ├── src/                 # Application code
+│   ├── prisma/              # Prisma schema & migrations
+│   ├── src/                 # Application code (incl. generated Prisma client)
 │   ├── test/                # e2e tests
 │   └── Dockerfile
 └── loans-service/           # ASP.NET Core service
