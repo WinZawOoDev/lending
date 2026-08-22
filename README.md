@@ -1,16 +1,22 @@
 # Lending Platform
 
-A polyglot microservices workspace for a lending domain, consisting of an **accounts-service** and a **loans-service**, backed by PostgreSQL and Elasticsearch, orchestrated with Docker Compose.
+A polyglot microservices workspace for a lending domain, consisting of a **YARP API gateway**, an **accounts-service** and a **loans-service**, backed by PostgreSQL and Elasticsearch, orchestrated with Docker Compose.
 
 ## Architecture
 
 ```
-┌─────────────────┐      ┌────────────────┐
-│ accounts-service │      │  loans-service │
-│   (NestJS :3000) │      │ (.NET 9 :8080) │
-└────────┬────────┘      └───────┬────────┘
-         │                       │
-         └───────────┬───────────┘
+                    ┌───────────────────────┐
+   client ──:8080──▶│  gateway-service      │
+                    │  (YARP, .NET 9)       │
+                    └──────────┬────────────┘
+              ┌────────────────┼────────────────┐
+              ▼ /accounts/*                     ▼ /loans/*
+     ┌─────────────────┐               ┌────────────────┐
+     │ accounts-service │               │  loans-service │
+     │   (NestJS :3000) │               │ (.NET 9 :8080) │
+     └────────┬────────┘               └───────┬────────┘
+              │                                │
+              └───────────────┬────────────────┘
                      ▼
         ┌─────────────────────────┐
         │     lending-network     │
@@ -37,6 +43,14 @@ A polyglot microservices workspace for a lending domain, consisting of an **acco
 | ASP.NET Core | 9.0 | Web API framework |
 | C# | 13 | Language |
 | OpenAPI | 9.0.16 | API documentation |
+
+### gateway-service (`/gateway-service`)
+| Technology | Version | Purpose |
+|---|---|---|
+| YARP | 2.3.0 | Reverse proxy / API gateway |
+| ASP.NET Core | 9.0 | Host runtime |
+
+Routes: `/accounts/*` → accounts-service, `/loans/*` → loans-service (prefix stripped before forwarding). Route config lives in `gateway-service/appsettings.json`.
 
 ### Infrastructure
 | Technology | Image | Port | Notes |
@@ -66,8 +80,9 @@ docker compose up --build
 
 | Endpoint | URL |
 |---|---|
-| accounts-service | http://localhost:3000 |
-| loans-service | http://localhost:5120 |
+| API gateway | http://localhost:8080 |
+| accounts-service (direct) | http://localhost:3000 |
+| loans-service (direct) | http://localhost:5120 |
 | pgAdmin | http://localhost:5050 |
 | Elasticsearch | http://localhost:9200 |
 
@@ -134,6 +149,9 @@ Connection strings are already wired in `docker-compose.yml` — when running lo
 ```
 lending/
 ├── docker-compose.yml       # Full stack orchestration
+├── gateway-service/         # YARP API gateway (.NET 9)
+│   ├── appsettings.json     # Proxy routes & clusters
+│   └── Dockerfile
 ├── accounts-service/        # NestJS service
 │   ├── src/                 # Application code
 │   ├── test/                # e2e tests

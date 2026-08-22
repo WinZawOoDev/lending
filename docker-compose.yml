@@ -1,4 +1,14 @@
 services:
+  gateway-service:
+    build: ./gateway-service
+    ports:
+      - "8080:8080"
+    depends_on:
+      - accounts-service
+      - loans-service
+    networks:
+      - lending-network
+
   accounts-service:
     build: ./accounts-service
     ports:
