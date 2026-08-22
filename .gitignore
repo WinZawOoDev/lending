@@ -1,0 +1,17 @@
+# Node / NestJS
+node_modules/
+dist/
+coverage/
+*.log
+.env
+.env.*
+
+# .NET
+bin/
+obj/
+*.user
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
