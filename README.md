@@ -28,6 +28,14 @@ A polyglot microservices workspace for a lending domain, consisting of a **YARP 
 
 ## Tech Stack
 
+### gateway-service (`/gateway-service`)
+| Technology | Version | Purpose |
+|---|---|---|
+| YARP | 2.3.0 | Reverse proxy / API gateway |
+| ASP.NET Core | 9.0 | Host runtime |
+
+Routes: `/accounts/*` → accounts-service, `/loans/*` → loans-service (prefix stripped before forwarding). Route config lives in `gateway-service/appsettings.json`.
+
 ### accounts-service (`/accounts-service`)
 | Technology | Version | Purpose |
 |---|---|---|
@@ -43,14 +51,6 @@ A polyglot microservices workspace for a lending domain, consisting of a **YARP 
 | ASP.NET Core | 9.0 | Web API framework |
 | C# | 13 | Language |
 | OpenAPI | 9.0.16 | API documentation |
-
-### gateway-service (`/gateway-service`)
-| Technology | Version | Purpose |
-|---|---|---|
-| YARP | 2.3.0 | Reverse proxy / API gateway |
-| ASP.NET Core | 9.0 | Host runtime |
-
-Routes: `/accounts/*` → accounts-service, `/loans/*` → loans-service (prefix stripped before forwarding). Route config lives in `gateway-service/appsettings.json`.
 
 ### Infrastructure
 | Technology | Image | Port | Notes |
