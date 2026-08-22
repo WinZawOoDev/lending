@@ -23,6 +23,7 @@ A polyglot microservices workspace for a lending domain, consisting of a **YARP 
         ├─────────────────────────┤
         │ postgres    pgadmin     │
         │ elasticsearch           │
+        │ rabbitmq                │
         └─────────────────────────┘
 ```
 
@@ -58,6 +59,7 @@ Routes: `/accounts/*` → accounts-service, `/loans/*` → loans-service (prefix
 | PostgreSQL | `postgres:17-alpine` | 5432 | Primary datastore, user/pass/db: `lending` |
 | pgAdmin | `dpage/pgadmin4:latest` | **5050** | Login: `admin@lending.local` / `admin` |
 | Elasticsearch | `elasticsearch:8.15.0` | 9200 | Single-node, security disabled, 512m heap |
+| RabbitMQ | `rabbitmq:4-management` | 5672 / **15672** | AMQP broker; management UI login: `lending` / `lending` |
 
 All containers communicate over the shared bridge network `lending-network`.
 

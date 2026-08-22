@@ -91,10 +91,29 @@ services:
     networks:
       - lending-network
 
+  rabbitmq:
+    image: rabbitmq:4-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: lending
+      RABBITMQ_DEFAULT_PASS: lending
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+    networks:
+      - lending-network
+
 volumes:
   postgres-data:
   pgadmin-data:
   elasticsearch-data:
+  rabbitmq-data:
 
 networks:
   lending-network:
