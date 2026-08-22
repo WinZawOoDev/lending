@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using loans_service.Events;
+using loans_service.Search;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 
@@ -20,15 +21,18 @@ public class AccountEventsConsumer : BackgroundService
 
     private readonly ILogger<AccountEventsConsumer> _logger;
     private readonly IConfiguration _configuration;
+    private readonly AccountIndexer _indexer;
     private IConnection? _connection;
     private IChannel? _channel;
 
     public AccountEventsConsumer(
         ILogger<AccountEventsConsumer> logger,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        AccountIndexer indexer)
     {
         _logger = logger;
         _configuration = configuration;
+        _indexer = indexer;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -112,12 +116,21 @@ public class AccountEventsConsumer : BackgroundService
 
             if (accountEvent is not null)
             {
+                switch (accountEvent.EventType)
+                {
+                    case "account.deleted":
+                        await _indexer.DeleteAsync(accountEvent.Data.Id, CancellationToken.None);
+                        break;
+                    default:
+                        await _indexer.IndexAsync(accountEvent.Data, CancellationToken.None);
+                        break;
+                }
+
                 _logger.LogInformation(
-                    "Received {EventType} for account {AccountId} ({Email}) balance={Balance}",
+                    "Processed {EventType} for account {AccountId} ({Email})",
                     accountEvent.EventType,
                     accountEvent.Data.Id,
-                    accountEvent.Data.Email,
-                    accountEvent.Data.Balance);
+                    accountEvent.Data.Email);
             }
 
             if (_channel is not null)

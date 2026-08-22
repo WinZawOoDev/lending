@@ -142,6 +142,10 @@ Connection is configured via `RABBITMQ_URL` (default local dev: `amqp://lending:
 
 **Consumers:**
 - loans-service runs `AccountEventsConsumer` (a .NET `BackgroundService`): durable queue `loans-service.account-events` bound with `account.*`, manual ack, automatic reconnect with 5s retry. Configure via `RabbitMQ:Uri` / `RabbitMQ__Uri`.
+- Received events are projected into Elasticsearch: `account.created`/`account.updated` upsert documents into the `accounts` index, `account.deleted` removes them. Configure via `Elasticsearch:Uri` / `Elasticsearch__Uri`. Query the projection with:
+  ```sh
+  curl http://localhost:9200/accounts/_search | jq
+  ```
 
 ## Development Guidelines
 
