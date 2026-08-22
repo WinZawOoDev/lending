@@ -1,7 +1,9 @@
 import { NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { AmqpConnection } from '@golevelup/nestjs-rabbitmq';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccountsService } from './accounts.service';
+import { ACCOUNT_EVENTS_EXCHANGE } from './events/account.event';
 
 const mockAccount = {
   id: '5f0b1e2c-3a4d-4b5c-8d9e-0a1b2c3d4e5f',
@@ -17,6 +19,7 @@ describe('AccountsService', () => {
   let prisma: {
     account: Record<string, jest.Mock>;
   };
+  let amqpConnection: { publish: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -28,11 +31,13 @@ describe('AccountsService', () => {
         delete: jest.fn().mockResolvedValue(mockAccount),
       },
     };
+    amqpConnection = { publish: jest.fn() };
 
     const moduleRef = await Test.createTestingModule({
       providers: [
         AccountsService,
         { provide: PrismaService, useValue: prisma },
+        { provide: AmqpConnection, useValue: amqpConnection },
       ],
     }).compile();
 
@@ -44,7 +49,7 @@ describe('AccountsService', () => {
   });
 
   describe('create', () => {
-    it('should create an account', async () => {
+    it('should create an account and publish account.created', async () => {
       const result = await service.create({
         name: 'Alice',
         email: 'alice@example.com',
@@ -53,6 +58,14 @@ describe('AccountsService', () => {
         data: { name: 'Alice', email: 'alice@example.com' },
       });
       expect(result).toEqual(mockAccount);
+      expect(amqpConnection.publish).toHaveBeenCalledWith(
+        ACCOUNT_EVENTS_EXCHANGE,
+        'account.created',
+        expect.objectContaining({
+          eventType: 'account.created',
+          data: { ...mockAccount, balance: String(mockAccount.balance) },
+        }),
+      );
     });
   });
 
@@ -85,6 +98,11 @@ describe('AccountsService', () => {
         data: { name: 'Bob' },
       });
       expect(result).toEqual({ ...mockAccount, name: 'Bob' });
+      expect(amqpConnection.publish).toHaveBeenCalledWith(
+        ACCOUNT_EVENTS_EXCHANGE,
+        'account.updated',
+        expect.objectContaining({ eventType: 'account.updated' }),
+      );
     });
 
     it('should throw NotFoundException when account does not exist', async () => {
@@ -102,6 +120,11 @@ describe('AccountsService', () => {
       expect(prisma.account.delete).toHaveBeenCalledWith({
         where: { id: mockAccount.id },
       });
+      expect(amqpConnection.publish).toHaveBeenCalledWith(
+        ACCOUNT_EVENTS_EXCHANGE,
+        'account.deleted',
+        expect.objectContaining({ eventType: 'account.deleted' }),
+      );
     });
 
     it('should throw NotFoundException when account does not exist', async () => {

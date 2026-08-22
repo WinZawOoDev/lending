@@ -128,6 +128,18 @@ Available through the gateway (`:8080`) or directly (`:3000`):
 
 Body fields: `name` (string, required), `email` (email, required), `balance` (number ≥ 0, optional).
 
+## Eventing
+
+accounts-service publishes domain events to the RabbitMQ topic exchange **`lending.events`**:
+
+| Routing key | Trigger | Payload |
+|---|---|---|
+| `account.created` | POST /accounts | `{ eventId, eventType, occurredAt, data }` |
+| `account.updated` | PATCH /accounts/:id | same envelope |
+| `account.deleted` | DELETE /accounts/:id | same envelope |
+
+Connection is configured via `RABBITMQ_URL` (default local dev: `amqp://lending:lending@localhost:5672`). Consumers should bind queues on this exchange using `account.*`.
+
 ## Development Guidelines
 
 ### General

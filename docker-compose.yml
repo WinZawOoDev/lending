@@ -17,8 +17,11 @@ services:
       PORT: 3000
       NODE_ENV: production
       DATABASE_URL: postgresql://lending:lending@postgres:5432/lending
+      RABBITMQ_URL: amqp://lending:lending@rabbitmq:5672
     depends_on:
       postgres:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     networks:
       - lending-network
