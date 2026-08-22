@@ -52,6 +52,9 @@ Routes: `/accounts/*` → accounts-service, `/loans/*` → loans-service (prefix
 |---|---|---|
 | ASP.NET Core | 9.0 | Web API framework |
 | C# | 13 | Language |
+| EF Core + Npgsql | 9.0 | ORM & PostgreSQL provider (migrations in `Migrations/`) |
+| RabbitMQ.Client | 7.2 | Event consumption |
+| Elastic.Clients.Elasticsearch | 8.19 | Search projection |
 | OpenAPI | 9.0.16 | API documentation |
 
 ### Infrastructure
@@ -147,6 +150,20 @@ Connection is configured via `RABBITMQ_URL` (default local dev: `amqp://lending:
   curl http://localhost:9200/accounts/_search | jq
   ```
 
+## Loans API
+
+Available through the gateway (`:8080`) or directly (`:5120`):
+
+| Method | Route | Description |
+|---|---|---|
+| POST | `/loans` | Create a loan (status starts at `Pending`) |
+| GET | `/loans` | List all loans |
+| GET | `/loans/:id` | Get one loan |
+| PATCH | `/loans/:id` | Update loan status (`Pending`, `Active`, `Paid`, `Defaulted`) |
+| DELETE | `/loans/:id` | Delete a loan (204) |
+
+Create body: `accountId` (string, required), `principal` (number > 0), `interestRate` (0–100), `termMonths` (1–360). Schema is managed by EF Core migrations (auto-applied on startup).
+
 ## Development Guidelines
 
 ### General
@@ -175,6 +192,11 @@ Connection is configured via `RABBITMQ_URL` (default local dev: `amqp://lending:
 
 ### loans-service (ASP.NET Core)
 - Follow the default Web API controller pattern (`Controllers/`).
+- Schema changes: update `Models/` + `Data/LoansDbContext.cs`, then:
+  ```sh
+  dotnet ef migrations add <Name>
+  ```
+- Migrations apply automatically on startup (`Database.MigrateAsync()` in `Program.cs`); to apply manually: `dotnet ef database update`.
 - Nullable reference types are enabled — handle nullability explicitly.
 - Test HTTP requests via `loans-service.http`.
 - Build & test:
