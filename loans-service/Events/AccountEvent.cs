@@ -23,6 +23,8 @@ public class AccountEvent
 
     public string EventType { get; set; } = string.Empty;
 
+    public string? RequestId { get; set; }
+
     public DateTime OccurredAt { get; set; }
 
     public AccountEventData Data { get; set; } = new();

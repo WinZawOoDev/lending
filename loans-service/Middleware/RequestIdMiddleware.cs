@@ -25,9 +25,17 @@ public class RequestIdMiddleware
         context.Items[HeaderName] = requestId;
         context.Response.Headers[HeaderName] = requestId;
 
-        using (_logger.BeginScope(new Dictionary<string, object> { ["RequestId"] = requestId.ToString() }))
+        RequestContext.RequestId = requestId;
+        try
         {
-            await _next(context);
+            using (_logger.BeginScope(new Dictionary<string, object> { ["RequestId"] = requestId.ToString() }))
+            {
+                await _next(context);
+            }
+        }
+        finally
+        {
+            RequestContext.RequestId = null;
         }
     }
 }

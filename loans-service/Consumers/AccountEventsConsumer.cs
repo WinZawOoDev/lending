@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using loans_service.Events;
+using loans_service.Middleware;
 using loans_service.Search;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
@@ -116,21 +117,29 @@ public class AccountEventsConsumer : BackgroundService
 
             if (accountEvent is not null)
             {
-                switch (accountEvent.EventType)
+                RequestContext.RequestId = accountEvent.RequestId;
+                try
                 {
-                    case "account.deleted":
-                        await _indexer.DeleteAsync(accountEvent.Data.Id, CancellationToken.None);
-                        break;
-                    default:
-                        await _indexer.IndexAsync(accountEvent.Data, CancellationToken.None);
-                        break;
-                }
+                    switch (accountEvent.EventType)
+                    {
+                        case "account.deleted":
+                            await _indexer.DeleteAsync(accountEvent.Data.Id, CancellationToken.None);
+                            break;
+                        default:
+                            await _indexer.IndexAsync(accountEvent.Data, CancellationToken.None);
+                            break;
+                    }
 
-                _logger.LogInformation(
-                    "Processed {EventType} for account {AccountId} ({Email})",
-                    accountEvent.EventType,
-                    accountEvent.Data.Id,
-                    accountEvent.Data.Email);
+                    _logger.LogInformation(
+                        "Processed {EventType} for account {AccountId} ({Email})",
+                        accountEvent.EventType,
+                        accountEvent.Data.Id,
+                        accountEvent.Data.Email);
+                }
+                finally
+                {
+                    RequestContext.RequestId = null;
+                }
             }
 
             if (_channel is not null)
