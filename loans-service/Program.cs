@@ -1,5 +1,6 @@
 using loans_service.Consumers;
 using loans_service.Data;
+using loans_service.Middleware;
 using loans_service.Search;
 using Elastic.Clients.Elasticsearch;
 using Microsoft.EntityFrameworkCore;
@@ -35,6 +36,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+app.UseRequestId();
 
 app.UseAuthorization();
 
