@@ -138,7 +138,10 @@ accounts-service publishes domain events to the RabbitMQ topic exchange **`lendi
 | `account.updated` | PATCH /accounts/:id | same envelope |
 | `account.deleted` | DELETE /accounts/:id | same envelope |
 
-Connection is configured via `RABBITMQ_URL` (default local dev: `amqp://lending:lending@localhost:5672`). Consumers should bind queues on this exchange using `account.*`.
+Connection is configured via `RABBITMQ_URL` (default local dev: `amqp://lending:lending@localhost:5672`).
+
+**Consumers:**
+- loans-service runs `AccountEventsConsumer` (a .NET `BackgroundService`): durable queue `loans-service.account-events` bound with `account.*`, manual ack, automatic reconnect with 5s retry. Configure via `RabbitMQ:Uri` / `RabbitMQ__Uri`.
 
 ## Development Guidelines
 

@@ -34,10 +34,13 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=lending;Username=lending;Password=lending
       Elasticsearch__Uri: http://elasticsearch:9200
+      RabbitMQ__Uri: amqp://lending:lending@rabbitmq:5672
     depends_on:
       postgres:
         condition: service_healthy
       elasticsearch:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     networks:
       - lending-network
