@@ -4,8 +4,10 @@ services:
     ports:
       - "8080:8080"
     depends_on:
-      - accounts-service
-      - loans-service
+      accounts-service:
+        condition: service_healthy
+      loans-service:
+        condition: service_healthy
     networks:
       - lending-network
 
@@ -18,6 +20,12 @@ services:
       NODE_ENV: production
       DATABASE_URL: postgresql://lending:lending@postgres:5432/lending
       RABBITMQ_URL: amqp://lending:lending@rabbitmq:5672
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 5s
+      start_period: 15s
+      retries: 10
     depends_on:
       postgres:
         condition: service_healthy
@@ -35,6 +43,12 @@ services:
       ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=lending;Username=lending;Password=lending
       Elasticsearch__Uri: http://elasticsearch:9200
       RabbitMQ__Uri: amqp://lending:lending@rabbitmq:5672
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      start_period: 15s
+      retries: 10
     depends_on:
       postgres:
         condition: service_healthy
