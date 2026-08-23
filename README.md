@@ -101,6 +101,8 @@ Elasticsearch and RabbitMQ still use named volumes (`elasticsearch-data`, `rabbi
 docker compose up --build
 ```
 
+Database schema is applied automatically on startup: loans-service runs EF Core migrations itself, while a one-shot `accounts-db-setup` container applies the Prisma schema (`npx prisma migrate deploy`) before accounts-service starts.
+
 | Endpoint | URL |
 |---|---|
 | API gateway | http://localhost:8080 |
@@ -166,6 +168,13 @@ Connection is configured via `RABBITMQ_URL` (default local dev: `amqp://lending:
   ```sh
   curl http://localhost:9200/accounts/_search | jq
   ```
+
+## Correlation ID
+
+Requests are traced end-to-end via the **`x-correlation-id`** HTTP header:
+
+- gateway-service generates one when absent and forwards it to both backend services.
+- accounts-service and loans-service accept it (generating one otherwise), echo it in every response, attach it to log scopes/messages, and loans-service also honors it from consumed RabbitMQ events (`correlationId` field of the event envelope).
 
 ## Loans API
 

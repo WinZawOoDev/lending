@@ -11,6 +11,18 @@ services:
     networks:
       - lending-network
 
+  accounts-db-setup:
+    build:
+      context: ./accounts-service
+      target: db-setup
+    environment:
+      DATABASE_URL: postgresql://lending:lending@postgres:5432/accounts
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - lending-network
+
   accounts-service:
     build: ./accounts-service
     ports:
@@ -27,6 +39,8 @@ services:
       start_period: 15s
       retries: 10
     depends_on:
+      accounts-db-setup:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       rabbitmq:

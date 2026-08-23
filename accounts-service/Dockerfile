@@ -17,6 +17,10 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --omit=dev
 
+# One-shot stage: applies the Prisma schema to the database, then exits
+FROM build AS db-setup
+CMD ["npx", "prisma", "migrate", "deploy"]
+
 FROM node:22-alpine
 WORKDIR /app
 ENV NODE_ENV=production
