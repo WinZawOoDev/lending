@@ -67,6 +67,23 @@ Routes: `/accounts/*` → accounts-service, `/loans/*` → loans-service (prefix
 
 All containers communicate over the shared bridge network `lending-network`.
 
+### Data storage
+
+PostgreSQL and pgAdmin persist their data on the host filesystem under `./data/` (gitignored) instead of named volumes:
+
+| Service | Host path | Container path | Notes |
+|---|---|---|---|
+| postgres | `./data/postgres` | `/var/lib/postgresql/data` | Ownership/permissions are fixed automatically by the image entrypoint |
+| pgadmin | `./data/pgadmin` | `/var/lib/pgadmin` | The container runs as uid `5050`; make the directory writable once before first start |
+
+One-time setup on Linux (required for pgAdmin):
+
+```sh
+sudo chown -R 5050:5050 data/pgadmin
+```
+
+Elasticsearch and RabbitMQ still use named volumes (`elasticsearch-data`, `rabbitmq-data`).
+
 ## Getting Started
 
 ### Prerequisites
