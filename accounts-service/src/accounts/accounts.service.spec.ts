@@ -2,7 +2,7 @@ import { NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { AmqpConnection } from '@golevelup/nestjs-rabbitmq';
 import { PrismaService } from '../prisma/prisma.service';
-import { RequestContextService } from '../common/request-context.service';
+import { CorrelationContextService } from '../common/correlation-context.service';
 import { AccountsService } from './accounts.service';
 import { ACCOUNT_EVENTS_EXCHANGE } from './events/account.event';
 
@@ -39,7 +39,7 @@ describe('AccountsService', () => {
         AccountsService,
         { provide: PrismaService, useValue: prisma },
         { provide: AmqpConnection, useValue: amqpConnection },
-        RequestContextService,
+        CorrelationContextService,
       ],
     }).compile();
 

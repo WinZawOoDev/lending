@@ -2,12 +2,12 @@ using Microsoft.AspNetCore.Http;
 
 namespace gateway_service.Middleware;
 
-public class RequestIdMiddleware
+public class CorrelationIdMiddleware
 {
-    private const string HeaderName = "x-request-id";
+    private const string HeaderName = "x-correlation-id";
     private readonly RequestDelegate _next;
 
-    public RequestIdMiddleware(RequestDelegate next)
+    public CorrelationIdMiddleware(RequestDelegate next)
     {
         _next = next;
     }
@@ -23,10 +23,10 @@ public class RequestIdMiddleware
     }
 }
 
-public static class RequestIdMiddlewareExtensions
+public static class CorrelationIdMiddlewareExtensions
 {
-    public static IApplicationBuilder UseRequestId(this IApplicationBuilder app)
+    public static IApplicationBuilder UseCorrelationId(this IApplicationBuilder app)
     {
-        return app.UseMiddleware<RequestIdMiddleware>();
+        return app.UseMiddleware<CorrelationIdMiddleware>();
     }
 }

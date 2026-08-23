@@ -5,14 +5,14 @@ import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { AccountsModule } from './accounts/accounts.module';
 import { HealthModule } from './health/health.module';
-import { RequestIdMiddleware } from './common/request-id.middleware';
-import { RequestContextModule } from './common/request-context.module';
+import { CorrelationIdMiddleware } from './common/correlation-id.middleware';
+import { CorrelationContextModule } from './common/correlation-context.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
-    RequestContextModule,
+    CorrelationContextModule,
     AccountsModule,
     HealthModule,
   ],
@@ -21,6 +21,6 @@ import { RequestContextModule } from './common/request-context.module';
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(RequestIdMiddleware).forRoutes('*');
+    consumer.apply(CorrelationIdMiddleware).forRoutes('*');
   }
 }

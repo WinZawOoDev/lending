@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { AmqpConnection } from '@golevelup/nestjs-rabbitmq';
 import { PrismaService } from '../prisma/prisma.service';
-import { RequestContextService } from '../common/request-context.service';
+import { CorrelationContextService } from '../common/correlation-context.service';
 import type { Account } from '../generated/prisma/client';
 import { CreateAccountDto } from './dto/create-account.dto';
 import { UpdateAccountDto } from './dto/update-account.dto';
@@ -12,7 +12,7 @@ export class AccountsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly amqpConnection: AmqpConnection,
-    private readonly requestContext: RequestContextService,
+    private readonly correlationContext: CorrelationContextService,
   ) {}
 
   async create(createAccountDto: CreateAccountDto): Promise<Account> {
@@ -62,7 +62,7 @@ export class AccountsService {
       eventId: crypto.randomUUID(),
       eventType,
       occurredAt: new Date(),
-      requestId: this.requestContext.requestId,
+      correlationId: this.correlationContext.correlationId,
       data: { ...account, balance: account.balance.toString() },
     };
     await this.amqpConnection.publish(

@@ -16,8 +16,8 @@ public class LoanService(LoansDbContext context, ILogger<LoanService> logger) : 
             .ToListAsync(cancellationToken);
 
         logger.LogInformation(
-            "Retrieved {Count} loans (request {RequestId})",
-            loans.Count, RequestContext.RequestId);
+            "Retrieved {Count} loans (correlation {CorrelationId})",
+            loans.Count, CorrelationContext.CorrelationId);
 
         return loans;
     }
@@ -28,7 +28,7 @@ public class LoanService(LoansDbContext context, ILogger<LoanService> logger) : 
 
         if (loan is null)
         {
-            logger.LogWarning("Loan {LoanId} not found (request {RequestId})", id, RequestContext.RequestId);
+            logger.LogWarning("Loan {LoanId} not found (correlation {CorrelationId})", id, CorrelationContext.CorrelationId);
         }
 
         return loan;
@@ -52,8 +52,8 @@ public class LoanService(LoansDbContext context, ILogger<LoanService> logger) : 
         await context.SaveChangesAsync(cancellationToken);
 
         logger.LogInformation(
-            "Created loan {LoanId} for account {AccountId} with principal {Principal} (request {RequestId})",
-            loan.Id, loan.AccountId, loan.Principal, RequestContext.RequestId);
+            "Created loan {LoanId} for account {AccountId} with principal {Principal} (correlation {CorrelationId})",
+            loan.Id, loan.AccountId, loan.Principal, CorrelationContext.CorrelationId);
 
         return loan;
     }
@@ -63,7 +63,7 @@ public class LoanService(LoansDbContext context, ILogger<LoanService> logger) : 
         var loan = await context.Loans.FindAsync([id], cancellationToken);
         if (loan is null)
         {
-            logger.LogWarning("Cannot update missing loan {LoanId} (request {RequestId})", id, RequestContext.RequestId);
+            logger.LogWarning("Cannot update missing loan {LoanId} (correlation {CorrelationId})", id, CorrelationContext.CorrelationId);
             return null;
         }
 
@@ -72,8 +72,8 @@ public class LoanService(LoansDbContext context, ILogger<LoanService> logger) : 
         await context.SaveChangesAsync(cancellationToken);
 
         logger.LogInformation(
-            "Updated loan {LoanId} status to {Status} (request {RequestId})",
-            loan.Id, loan.Status, RequestContext.RequestId);
+            "Updated loan {LoanId} status to {Status} (correlation {CorrelationId})",
+            loan.Id, loan.Status, CorrelationContext.CorrelationId);
 
         return loan;
     }
@@ -83,7 +83,7 @@ public class LoanService(LoansDbContext context, ILogger<LoanService> logger) : 
         var loan = await context.Loans.FindAsync([id], cancellationToken);
         if (loan is null)
         {
-            logger.LogWarning("Cannot delete missing loan {LoanId} (request {RequestId})", id, RequestContext.RequestId);
+            logger.LogWarning("Cannot delete missing loan {LoanId} (correlation {CorrelationId})", id, CorrelationContext.CorrelationId);
             return false;
         }
 
@@ -91,8 +91,8 @@ public class LoanService(LoansDbContext context, ILogger<LoanService> logger) : 
         await context.SaveChangesAsync(cancellationToken);
 
         logger.LogInformation(
-            "Deleted loan {LoanId} for account {AccountId} (request {RequestId})",
-            loan.Id, loan.AccountId, RequestContext.RequestId);
+            "Deleted loan {LoanId} for account {AccountId} (correlation {CorrelationId})",
+            loan.Id, loan.AccountId, CorrelationContext.CorrelationId);
 
         return true;
     }

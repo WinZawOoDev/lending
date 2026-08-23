@@ -117,7 +117,7 @@ public class AccountEventsConsumer : BackgroundService
 
             if (accountEvent is not null)
             {
-                RequestContext.RequestId = accountEvent.RequestId;
+                CorrelationContext.CorrelationId = accountEvent.CorrelationId;
                 try
                 {
                     switch (accountEvent.EventType)
@@ -138,7 +138,7 @@ public class AccountEventsConsumer : BackgroundService
                 }
                 finally
                 {
-                    RequestContext.RequestId = null;
+                    CorrelationContext.CorrelationId = null;
                 }
             }
 

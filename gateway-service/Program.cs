@@ -9,7 +9,7 @@ builder.Services.AddReverseProxy()
 
 var app = builder.Build();
 
-app.UseRequestId();
+app.UseCorrelationId();
 
 app.MapHealthChecks("/health");
 

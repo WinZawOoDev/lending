@@ -14,7 +14,7 @@ export interface AccountEvent {
   eventId: string;
   eventType: 'account.created' | 'account.updated' | 'account.deleted';
   occurredAt: Date;
-  requestId?: string;
+  correlationId?: string;
   data: Partial<AccountEventPayload>;
 }
 

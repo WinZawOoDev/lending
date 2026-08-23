@@ -23,7 +23,7 @@ public class AccountEvent
 
     public string EventType { get; set; } = string.Empty;
 
-    public string? RequestId { get; set; }
+    public string? CorrelationId { get; set; }
 
     public DateTime OccurredAt { get; set; }
 
