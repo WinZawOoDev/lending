@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using loans_service.Dtos;
 using loans_service.Models;
@@ -6,14 +7,22 @@ using loans_service.Services;
 namespace loans_service.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("loans")]
 public class LoansController(ILoanService loanService) : ControllerBase
 {
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<Loan>>> GetAll(CancellationToken cancellationToken)
+    public async Task<ActionResult<PagedResult<Loan>>> GetAll(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        [FromQuery] LoanStatus? status = null,
+        CancellationToken cancellationToken = default)
     {
-        var loans = await loanService.GetAllAsync(cancellationToken);
-        return Ok(loans);
+        page = Math.Max(page, 1);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+
+        var result = await loanService.GetAllAsync(page, pageSize, status, cancellationToken);
+        return Ok(result);
     }
 
     [HttpGet("{id:guid}")]
@@ -43,13 +52,15 @@ public class LoansController(ILoanService loanService) : ControllerBase
         UpdateLoanDto dto,
         CancellationToken cancellationToken)
     {
-        var loan = await loanService.UpdateAsync(id, dto, cancellationToken);
-        if (loan is null)
-        {
-            return NotFound();
-        }
+        var result = await loanService.UpdateAsync(id, dto, cancellationToken);
 
-        return Ok(loan);
+        return result.Status switch
+        {
+            LoanUpdateStatus.NotFound => NotFound(),
+            LoanUpdateStatus.InvalidTransition => Conflict(
+                new { message = $"Invalid status transition from '{result.Loan!.Status}' to '{dto.Status}'." }),
+            _ => Ok(result.Loan),
+        };
     }
 
     [HttpDelete("{id:guid}")]

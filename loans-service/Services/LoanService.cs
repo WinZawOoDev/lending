@@ -8,18 +8,32 @@ namespace loans_service.Services;
 
 public class LoanService(LoansDbContext context, ILogger<LoanService> logger) : ILoanService
 {
-    public async Task<List<Loan>> GetAllAsync(CancellationToken cancellationToken)
+    public async Task<PagedResult<Loan>> GetAllAsync(
+        int page,
+        int pageSize,
+        LoanStatus? status,
+        CancellationToken cancellationToken)
     {
-        var loans = await context.Loans
-            .AsNoTracking()
+        var query = context.Loans.AsNoTracking();
+
+        if (status is not null)
+        {
+            query = query.Where(l => l.Status == status);
+        }
+
+        var totalCount = await query.CountAsync(cancellationToken);
+
+        var loans = await query
             .OrderByDescending(l => l.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .ToListAsync(cancellationToken);
 
         logger.LogInformation(
-            "Retrieved {Count} loans (correlation {CorrelationId})",
-            loans.Count, CorrelationContext.CorrelationId);
+            "Retrieved {Count} loans for page {Page} (correlation {CorrelationId})",
+            loans.Count, page, CorrelationContext.CorrelationId);
 
-        return loans;
+        return new PagedResult<Loan>(loans, totalCount, page, pageSize);
     }
 
     public async Task<Loan?> GetByIdAsync(Guid id, CancellationToken cancellationToken)
@@ -58,13 +72,21 @@ public class LoanService(LoansDbContext context, ILogger<LoanService> logger) : 
         return loan;
     }
 
-    public async Task<Loan?> UpdateAsync(Guid id, UpdateLoanDto dto, CancellationToken cancellationToken)
+    public async Task<LoanUpdateResult> UpdateAsync(Guid id, UpdateLoanDto dto, CancellationToken cancellationToken)
     {
         var loan = await context.Loans.FindAsync([id], cancellationToken);
         if (loan is null)
         {
             logger.LogWarning("Cannot update missing loan {LoanId} (correlation {CorrelationId})", id, CorrelationContext.CorrelationId);
-            return null;
+            return new LoanUpdateResult(LoanUpdateStatus.NotFound);
+        }
+
+        if (!LoanStatusRules.CanTransition(loan.Status, dto.Status))
+        {
+            logger.LogWarning(
+                "Invalid status transition for loan {LoanId}: {Current} -> {Next} (correlation {CorrelationId})",
+                loan.Id, loan.Status, dto.Status, CorrelationContext.CorrelationId);
+            return new LoanUpdateResult(LoanUpdateStatus.InvalidTransition, loan);
         }
 
         loan.Status = dto.Status;
@@ -75,7 +97,7 @@ public class LoanService(LoansDbContext context, ILogger<LoanService> logger) : 
             "Updated loan {LoanId} status to {Status} (correlation {CorrelationId})",
             loan.Id, loan.Status, CorrelationContext.CorrelationId);
 
-        return loan;
+        return new LoanUpdateResult(LoanUpdateStatus.Updated, loan);
     }
 
     public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken)

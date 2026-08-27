@@ -7,12 +7,14 @@ import { AccountsModule } from './accounts/accounts.module';
 import { HealthModule } from './health/health.module';
 import { CorrelationIdMiddleware } from './common/correlation-id.middleware';
 import { CorrelationContextModule } from './common/correlation-context.module';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
     CorrelationContextModule,
+    AuthModule,
     AccountsModule,
     HealthModule,
   ],
