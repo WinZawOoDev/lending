@@ -42,6 +42,25 @@ export class AccountsService {
     return this.prisma.account.findMany();
   }
 
+  async view(id: string, actorId?: string): Promise<Account> {
+    const account = await this.findOne(id);
+    await this.auditService.record({
+      eventType: 'account.viewed',
+      aggregate: 'account',
+      aggregateId: account.id,
+      actorId,
+      correlationId: this.correlationContext.correlationId,
+      occurredAt: new Date(),
+      before: null,
+      after: {
+        id: account.id,
+        email: account.email,
+        updatedAt: account.updatedAt,
+      },
+    });
+    return account;
+  }
+
   async findOne(id: string): Promise<Account> {
     const account = await this.prisma.account.findUnique({ where: { id } });
     if (!account) {

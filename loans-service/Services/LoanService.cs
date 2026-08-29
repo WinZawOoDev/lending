@@ -47,7 +47,25 @@ public class LoanService(
         if (loan is null)
         {
             logger.LogWarning("Loan {LoanId} not found (correlation {CorrelationId})", id, CorrelationContext.CorrelationId);
+
+            await auditService.RecordAsync(
+                "loan.view.denied",
+                "loan",
+                id.ToString(),
+                null,
+                new { reason = "not_found" },
+                cancellationToken);
+
+            return null;
         }
+
+        await auditService.RecordAsync(
+            "loan.viewed",
+            "loan",
+            loan.Id.ToString(),
+            null,
+            new { loan.Status, loan.Principal, loan.AccountId },
+            cancellationToken);
 
         return loan;
     }

@@ -37,8 +37,11 @@ export class AccountsController {
   }
 
   @Get(':id')
-  findOne(@Param('id', ParseUUIDPipe) id: string): Promise<Account> {
-    return this.accountsService.findOne(id);
+  findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actorId?: string,
+  ): Promise<Account> {
+    return this.accountsService.view(id, actorId);
   }
 
   @Patch(':id')

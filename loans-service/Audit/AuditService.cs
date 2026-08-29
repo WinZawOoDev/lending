@@ -1,13 +1,17 @@
 using Elastic.Clients.Elasticsearch;
+using Elastic.Clients.Elasticsearch.IndexLifecycleManagement;
+using Elastic.Clients.Elasticsearch.Mapping;
 using Elastic.Clients.Elasticsearch.QueryDsl;
 using loans_service.Middleware;
-using System.Security.Claims;
 
 namespace loans_service.Audit;
 
 public class AuditService
 {
-    public const string IndexName = "loan-audit";
+    public const string MutationIndex = "loan-audit";
+    public const string ViewIndex = "loan-view-audit";
+    public const string ViewIlmPolicy = "loan-view-audit-retention";
+    public const string ViewWriteAlias = "loan-view-audit-write";
 
     private readonly ElasticsearchClient _client;
     private readonly IHttpContextAccessor _httpContextAccessor;
@@ -43,9 +47,12 @@ public class AuditService
             After = after,
         };
 
+        var isView = eventType is "loan.viewed" or "loan.view.denied";
+        var index = isView ? ViewWriteAlias : MutationIndex;
+
         var response = await _client.IndexAsync(
             entry,
-            i => i.Index(IndexName).Id(Guid.NewGuid().ToString()),
+            i => i.Index(index).Id(Guid.NewGuid().ToString()),
             cancellationToken);
 
         if (!response.IsSuccess())
@@ -91,7 +98,7 @@ public class AuditService
         Query query = must.Count > 0 ? new BoolQuery { Must = must } : new MatchAllQuery();
 
         var response = await _client.SearchAsync<AuditEntry>(s => s
-            .Indices(IndexName)
+            .Indices("loan-audit,loan-view-audit")
             .Query(query)
             .Sort(sort => sort
                 .Field("occurredAt", f => f.Order(SortOrder.Desc)))
@@ -110,30 +117,100 @@ public class AuditService
 
     public async Task EnsureIndexAsync(CancellationToken cancellationToken)
     {
-        var exists = await _client.Indices.ExistsAsync(IndexName, cancellationToken);
+        await EnsureMutationIndexAsync(cancellationToken);
+        await EnsureViewIndexAsync(cancellationToken);
+    }
+
+    private async Task EnsureMutationIndexAsync(CancellationToken cancellationToken)
+    {
+        var exists = await _client.Indices.ExistsAsync(MutationIndex, cancellationToken);
 
         if (exists.Exists)
         {
             return;
         }
 
-        var response = await _client.Indices.CreateAsync<AuditEntry>(IndexName,
-            c => c.Mappings(m => m
-                .Properties(p => p
-                    .Keyword(k => k.EventType)
-                    .Keyword(k => k.Aggregate)
-                    .Keyword(k => k.AggregateId)
-                    .Keyword(k => k.ActorId)
-                    .Keyword(k => k.CorrelationId)
-                    .Date(d => d.OccurredAt))),
-            cancellationToken);
+        var response = await _client.Indices.CreateAsync<AuditEntry>(MutationIndex,
+            c => c.Mappings(m => m.Properties(Properties)));
 
         if (!response.IsSuccess())
         {
             throw new InvalidOperationException(
-                $"Failed to create audit index {IndexName}: {response.DebugInformation}");
+                $"Failed to create audit index {MutationIndex}: {response.DebugInformation}");
         }
 
-        _logger.LogInformation("Created Elasticsearch index {Index}", IndexName);
+        _logger.LogInformation("Created Elasticsearch index {Index}", MutationIndex);
     }
+
+    private async Task EnsureViewIndexAsync(CancellationToken cancellationToken)
+    {
+        var policyResponse = await _client.IndexLifecycleManagement.PutLifecycleAsync(
+            new PutLifecycleRequest(ViewIlmPolicy)
+            {
+                Policy = new IlmPolicy
+                {
+                    Phases = new Phases
+                    {
+                        Hot = new Phase
+                        {
+                            Actions = new Actions
+                            {
+                                Rollover = new RolloverAction
+                                {
+                                    MaxSize = "1gb",
+                                    MaxAge = "7d",
+                                },
+                            },
+                        },
+                        Delete = new Phase
+                        {
+                            MinAge = "30d",
+                            Actions = new Actions
+                            {
+                                Delete = new DeleteAction(),
+                            },
+                        },
+                    },
+                },
+            },
+            cancellationToken);
+
+        if (!policyResponse.IsSuccess())
+        {
+            throw new InvalidOperationException(
+                $"Failed to create ILM policy {ViewIlmPolicy}: {policyResponse.DebugInformation}");
+        }
+
+        var exists = await _client.Indices.ExistsAsync(ViewIndex, cancellationToken);
+
+        if (exists.Exists)
+        {
+            return;
+        }
+
+        var createResponse = await _client.Indices.CreateAsync<AuditEntry>(ViewIndex,
+            c => c
+                .Mappings(m => m.Properties(Properties))
+                .Settings(s => s
+                    .NumberOfShards(1)
+                    .NumberOfReplicas(0)
+                    .Lifecycle(l => l.Name(ViewIlmPolicy)))
+                .Aliases(a => a.Add(ViewWriteAlias, al => al.IsWriteIndex(true))));
+
+        if (!createResponse.IsSuccess())
+        {
+            throw new InvalidOperationException(
+                $"Failed to create audit index {ViewIndex}: {createResponse.DebugInformation}");
+        }
+
+        _logger.LogInformation("Created Elasticsearch index {Index}", ViewIndex);
+    }
+
+    private static Action<PropertiesDescriptor<AuditEntry>> Properties => p => p
+        .Keyword(k => k.EventType)
+        .Keyword(k => k.Aggregate)
+        .Keyword(k => k.AggregateId)
+        .Keyword(k => k.ActorId)
+        .Keyword(k => k.CorrelationId)
+        .Date(d => d.OccurredAt);
 }

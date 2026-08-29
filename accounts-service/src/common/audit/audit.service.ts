@@ -8,7 +8,11 @@ import { ConfigService } from '@nestjs/config';
 import { Client } from '@elastic/elasticsearch';
 
 export interface AuditEntry {
-  eventType: 'account.created' | 'account.updated' | 'account.deleted';
+  eventType:
+    | 'account.created'
+    | 'account.updated'
+    | 'account.deleted'
+    | 'account.viewed';
   aggregate: 'account';
   aggregateId: string;
   actorId?: string | null;
