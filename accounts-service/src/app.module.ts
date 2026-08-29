@@ -8,6 +8,7 @@ import { HealthModule } from './health/health.module';
 import { CorrelationIdMiddleware } from './common/correlation-id.middleware';
 import { CorrelationContextModule } from './common/correlation-context.module';
 import { AuthModule } from './auth/auth.module';
+import { AuditModule } from './common/audit/audit.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { AuthModule } from './auth/auth.module';
     PrismaModule,
     CorrelationContextModule,
     AuthModule,
+    AuditModule,
     AccountsModule,
     HealthModule,
   ],

@@ -2,6 +2,7 @@ using loans_service.Consumers;
 using loans_service.Data;
 using loans_service.Middleware;
 using loans_service.Search;
+using loans_service.Audit;
 using loans_service.Services;
 using Elastic.Clients.Elasticsearch;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -41,6 +42,8 @@ builder.Services.AddHostedService<AccountEventsConsumer>();
 var elasticsearchUri = builder.Configuration["Elasticsearch:Uri"] ?? "http://localhost:9200";
 builder.Services.AddSingleton(new ElasticsearchClient(new ElasticsearchClientSettings(new Uri(elasticsearchUri))));
 builder.Services.AddSingleton<AccountIndexer>();
+builder.Services.AddSingleton<AuditService>();
+builder.Services.AddHttpContextAccessor();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
@@ -50,6 +53,9 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<LoansDbContext>();
     await db.Database.MigrateAsync();
+
+    var audit = scope.ServiceProvider.GetRequiredService<AuditService>();
+    await audit.EnsureIndexAsync(CancellationToken.None);
 }
 
 // Configure the HTTP request pipeline.

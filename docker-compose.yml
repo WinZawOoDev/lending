@@ -38,6 +38,7 @@ services:
       NODE_ENV: production
       DATABASE_URL: postgresql://lending:lending@postgres:5432/accounts
       RABBITMQ_URL: amqp://lending:lending@rabbitmq:5672
+      ELASTICSEARCH_URL: http://elasticsearch:9200
       JWT_KEY: ${JWT_KEY:-replace-me-with-a-secret-at-least-32-characters-long}
       JWT_ISSUER: lending-gateway
       JWT_AUDIENCE: lending-services
@@ -53,6 +54,8 @@ services:
       postgres:
         condition: service_healthy
       rabbitmq:
+        condition: service_healthy
+      elasticsearch:
         condition: service_healthy
     networks:
       - lending-network

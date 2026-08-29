@@ -3,6 +3,7 @@ import { Test } from '@nestjs/testing';
 import { AmqpConnection } from '@golevelup/nestjs-rabbitmq';
 import { PrismaService } from '../prisma/prisma.service';
 import { CorrelationContextService } from '../common/correlation-context.service';
+import { AuditService } from '../common/audit/audit.service';
 import { AccountsService } from './accounts.service';
 import { ACCOUNT_EVENTS_EXCHANGE } from './events/account.event';
 
@@ -21,6 +22,7 @@ describe('AccountsService', () => {
     account: Record<string, jest.Mock>;
   };
   let amqpConnection: { publish: jest.Mock };
+  let auditService: { record: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -33,12 +35,14 @@ describe('AccountsService', () => {
       },
     };
     amqpConnection = { publish: jest.fn() };
+    auditService = { record: jest.fn() };
 
     const moduleRef = await Test.createTestingModule({
       providers: [
         AccountsService,
         { provide: PrismaService, useValue: prisma },
         { provide: AmqpConnection, useValue: amqpConnection },
+        { provide: AuditService, useValue: auditService },
         CorrelationContextService,
       ],
     }).compile();
