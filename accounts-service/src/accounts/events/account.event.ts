@@ -3,11 +3,11 @@ export interface AccountEventPayload {
   name: string;
   email: string;
   /**
-   * Prisma Decimal serializes to a string over the wire.
+   * Decimal columns are read as decimal strings.
    */
-  balance: number | string;
-  createdAt: Date;
-  updatedAt: Date;
+  balance: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface AccountEvent {

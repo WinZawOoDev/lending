@@ -6,30 +6,58 @@ import { CorrelationContextService } from '../common/correlation-context.service
 import { AccountsService } from './accounts.service';
 import { ACCOUNT_EVENTS_EXCHANGE } from './events/account.event';
 
+jest.mock('../prisma/prisma.service', () => ({
+  PrismaService: class PrismaService {},
+}));
+
 const mockAccount = {
   id: '5f0b1e2c-3a4d-4b5c-8d9e-0a1b2c3d4e5f',
   name: 'Alice',
   email: 'alice@example.com',
-  balance: 100,
-  createdAt: new Date(),
-  updatedAt: new Date(),
+  balance: '100',
+  createdAt: '2024-01-01T00:00:00.000Z',
+  updatedAt: '2024-01-01T00:00:00.000Z',
 };
 
 describe('AccountsService', () => {
   let service: AccountsService;
+  let collection: {
+    first: jest.Mock;
+    update: jest.Mock;
+    delete: jest.Mock;
+  };
   let prisma: {
-    account: Record<string, jest.Mock>;
+    db: {
+      orm: {
+        public: {
+          Account: {
+            create: jest.Mock;
+            all: jest.Mock;
+            where: jest.Mock;
+          };
+        };
+      };
+    };
   };
   let amqpConnection: { publish: jest.Mock };
 
   beforeEach(async () => {
+    collection = {
+      first: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn(),
+    };
     prisma = {
-      account: {
-        create: jest.fn().mockResolvedValue(mockAccount),
-        findMany: jest.fn().mockResolvedValue([mockAccount]),
-        findUnique: jest.fn(),
-        update: jest.fn().mockResolvedValue({ ...mockAccount, name: 'Bob' }),
-        delete: jest.fn().mockResolvedValue(mockAccount),
+      db: {
+        orm: {
+          public: {
+            Account: {
+              create: jest.fn().mockResolvedValue(mockAccount),
+              all: jest.fn().mockResolvedValue([mockAccount]),
+              where: jest.fn().mockReturnValue(collection),
+            },
+          },
+        },
       },
     };
     amqpConnection = { publish: jest.fn() };
@@ -56,8 +84,9 @@ describe('AccountsService', () => {
         name: 'Alice',
         email: 'alice@example.com',
       });
-      expect(prisma.account.create).toHaveBeenCalledWith({
-        data: { name: 'Alice', email: 'alice@example.com' },
+      expect(prisma.db.orm.public.Account.create).toHaveBeenCalledWith({
+        name: 'Alice',
+        email: 'alice@example.com',
       });
       expect(result).toEqual(mockAccount);
       expect(amqpConnection.publish).toHaveBeenCalledWith(
@@ -65,7 +94,7 @@ describe('AccountsService', () => {
         'account.created',
         expect.objectContaining({
           eventType: 'account.created',
-          data: { ...mockAccount, balance: String(mockAccount.balance) },
+          data: { ...mockAccount },
         }),
       );
     });
@@ -79,12 +108,15 @@ describe('AccountsService', () => {
 
   describe('findOne', () => {
     it('should return an account when found', async () => {
-      prisma.account.findUnique.mockResolvedValue(mockAccount);
+      collection.first.mockResolvedValue(mockAccount);
       expect(await service.findOne(mockAccount.id)).toEqual(mockAccount);
+      expect(prisma.db.orm.public.Account.where).toHaveBeenCalledWith({
+        id: mockAccount.id,
+      });
     });
 
     it('should throw NotFoundException when not found', async () => {
-      prisma.account.findUnique.mockResolvedValue(null);
+      collection.first.mockResolvedValue(null);
       await expect(service.findOne('missing-id')).rejects.toThrow(
         NotFoundException,
       );
@@ -93,12 +125,13 @@ describe('AccountsService', () => {
 
   describe('update', () => {
     it('should update and return the account', async () => {
-      prisma.account.findUnique.mockResolvedValue(mockAccount);
+      collection.first.mockResolvedValue(mockAccount);
+      collection.update.mockResolvedValue({ ...mockAccount, name: 'Bob' });
       const result = await service.update(mockAccount.id, { name: 'Bob' });
-      expect(prisma.account.update).toHaveBeenCalledWith({
-        where: { id: mockAccount.id },
-        data: { name: 'Bob' },
+      expect(prisma.db.orm.public.Account.where).toHaveBeenCalledWith({
+        id: mockAccount.id,
       });
+      expect(collection.update).toHaveBeenCalledWith({ name: 'Bob' });
       expect(result).toEqual({ ...mockAccount, name: 'Bob' });
       expect(amqpConnection.publish).toHaveBeenCalledWith(
         ACCOUNT_EVENTS_EXCHANGE,
@@ -108,7 +141,7 @@ describe('AccountsService', () => {
     });
 
     it('should throw NotFoundException when account does not exist', async () => {
-      prisma.account.findUnique.mockResolvedValue(null);
+      collection.first.mockResolvedValue(null);
       await expect(
         service.update('missing-id', { name: 'Bob' }),
       ).rejects.toThrow(NotFoundException);
@@ -117,11 +150,13 @@ describe('AccountsService', () => {
 
   describe('remove', () => {
     it('should delete the account when found', async () => {
-      prisma.account.findUnique.mockResolvedValue(mockAccount);
+      collection.first.mockResolvedValue(mockAccount);
+      collection.delete.mockResolvedValue(mockAccount);
       await expect(service.remove(mockAccount.id)).resolves.toBeUndefined();
-      expect(prisma.account.delete).toHaveBeenCalledWith({
-        where: { id: mockAccount.id },
+      expect(prisma.db.orm.public.Account.where).toHaveBeenCalledWith({
+        id: mockAccount.id,
       });
+      expect(collection.delete).toHaveBeenCalled();
       expect(amqpConnection.publish).toHaveBeenCalledWith(
         ACCOUNT_EVENTS_EXCHANGE,
         'account.deleted',
@@ -130,7 +165,7 @@ describe('AccountsService', () => {
     });
 
     it('should throw NotFoundException when account does not exist', async () => {
-      prisma.account.findUnique.mockResolvedValue(null);
+      collection.first.mockResolvedValue(null);
       await expect(service.remove('missing-id')).rejects.toThrow(
         NotFoundException,
       );

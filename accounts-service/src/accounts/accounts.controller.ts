@@ -13,7 +13,7 @@ import {
 } from '@nestjs/common';
 import { AccountsService } from './accounts.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import type { Account } from '../generated/prisma/client';
+import { Account } from '../prisma/db';
 import { CreateAccountDto } from './dto/create-account.dto';
 import { UpdateAccountDto } from './dto/update-account.dto';
 

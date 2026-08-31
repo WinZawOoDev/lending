@@ -1,8 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { AmqpConnection } from '@golevelup/nestjs-rabbitmq';
 import { PrismaService } from '../prisma/prisma.service';
+import { Account } from '../prisma/db';
 import { CorrelationContextService } from '../common/correlation-context.service';
-import type { Account } from '../generated/prisma/client';
 import { CreateAccountDto } from './dto/create-account.dto';
 import { UpdateAccountDto } from './dto/update-account.dto';
 import { ACCOUNT_EVENTS_EXCHANGE, AccountEvent } from './events/account.event';
@@ -16,19 +16,21 @@ export class AccountsService {
   ) {}
 
   async create(createAccountDto: CreateAccountDto): Promise<Account> {
-    const account = await this.prisma.account.create({
-      data: createAccountDto,
-    });
+    const account = await this.prisma.db.orm.public.Account.create(
+      this.toWriteData(createAccountDto),
+    );
     await this.publishEvent('account.created', account);
     return account;
   }
 
-  findAll(): Promise<Account[]> {
-    return this.prisma.account.findMany();
+  async findAll(): Promise<Account[]> {
+    return await this.prisma.db.orm.public.Account.all();
   }
 
   async findOne(id: string): Promise<Account> {
-    const account = await this.prisma.account.findUnique({ where: { id } });
+    const account = await this.prisma.db.orm.public.Account.where({
+      id,
+    }).first();
     if (!account) {
       throw new NotFoundException(`Account #${id} not found`);
     }
@@ -40,18 +42,29 @@ export class AccountsService {
     updateAccountDto: UpdateAccountDto,
   ): Promise<Account> {
     await this.findOne(id);
-    const account = await this.prisma.account.update({
-      where: { id },
-      data: updateAccountDto,
-    });
+    const account = await this.prisma.db.orm.public.Account.where({
+      id,
+    }).update(this.toWriteData(updateAccountDto));
+    if (!account) {
+      throw new NotFoundException(`Account #${id} not found`);
+    }
     await this.publishEvent('account.updated', account);
     return account;
   }
 
   async remove(id: string): Promise<void> {
     const account = await this.findOne(id);
-    await this.prisma.account.delete({ where: { id } });
+    await this.prisma.db.orm.public.Account.where({ id }).delete();
     await this.publishEvent('account.deleted', account);
+  }
+
+  private toWriteData<T extends { balance?: number }>(
+    dto: T,
+  ): Omit<T, 'balance'> & { balance?: string } {
+    const { balance, ...rest } = dto;
+    return balance === undefined
+      ? rest
+      : { ...rest, balance: balance.toString() };
   }
 
   private async publishEvent(
@@ -63,7 +76,7 @@ export class AccountsService {
       eventType,
       occurredAt: new Date(),
       correlationId: this.correlationContext.correlationId,
-      data: { ...account, balance: account.balance.toString() },
+      data: { ...account },
     };
     await this.amqpConnection.publish(
       ACCOUNT_EVENTS_EXCHANGE,

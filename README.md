@@ -42,8 +42,8 @@ Routes: `/accounts/*` → accounts-service, `/loans/*` → loans-service (prefix
 |---|---|---|
 | NestJS | 11.x | Application framework |
 | TypeScript | 5.7.x | Language |
-| Prisma ORM | 7.9 | Database access (PostgreSQL, driver adapter `@prisma/adapter-pg`) |
-| Node.js | 22 (alpine) | Runtime |
+| Prisma ORM | 8 (RC) | Database access (PostgreSQL, runtime `@prisma/orm-postgres`) |
+| Node.js | 24 (alpine) | Runtime |
 | Jest + Supertest | 30 / 7 | Unit & e2e testing |
 | ESLint + Prettier | 9 / 3 | Linting & formatting |
 
@@ -87,7 +87,7 @@ Elasticsearch and RabbitMQ still use named volumes (`elasticsearch-data`, `rabbi
 ## Getting Started
 
 ### Prerequisites
-- Node.js ≥ 22 and npm
+- Node.js ≥ 24 and npm
 - .NET SDK ≥ 9.0
 - Docker & Docker Compose
 - On Linux, Elasticsearch requires:
@@ -101,9 +101,9 @@ Elasticsearch and RabbitMQ still use named volumes (`elasticsearch-data`, `rabbi
 docker compose up --build
 ```
 
-This starts the full stack in development mode: each service runs its hot-reload watcher (`nest start --watch` for accounts-service, `dotnet watch run` for the .NET services) against bind-mounted source directories (`./accounts-service`, `./loans-service`, `./gateway-service`). Edits are picked up without rebuilding images. Container-only paths (`node_modules`, `src/generated`, `dist`, `bin`, `obj`) are kept isolated in anonymous volumes.
+This starts the full stack in development mode: each service runs its hot-reload watcher (`nest start --watch` for accounts-service, `dotnet watch run` for the .NET services) against bind-mounted source directories (`./accounts-service`, `./loans-service`, `./gateway-service`). Edits are picked up without rebuilding images. Container-only paths (`node_modules`, `dist`, `bin`, `obj`) are kept isolated in anonymous volumes.
 
-Database schema is applied automatically on startup: loans-service runs EF Core migrations itself, while a one-shot `accounts-db-setup` container applies the Prisma schema (`npx prisma migrate deploy`) before accounts-service starts.
+Database schema is applied automatically on startup: loans-service runs EF Core migrations itself, while a one-shot `accounts-db-setup` container bootstraps the accounts database to match the Prisma contract (`npx prisma db init`) before accounts-service starts.
 
 ### Production build
 
@@ -139,8 +139,8 @@ Then run each service:
 # accounts-service
 cd accounts-service
 npm install
-npx prisma generate        # regenerate the Prisma client (gitignored)
-npx prisma migrate dev     # apply schema to the database
+npx prisma contract emit   # regenerate contract.json + contract.d.ts
+npx prisma db init         # bootstrap/sign the database to the contract
 npm run start:dev          # watches src/, listens on PORT ?? 3000
 
 # loans-service
@@ -216,11 +216,12 @@ Create body: `accountId` (string, required), `principal` (number > 0), `interest
   ```sh
   nest g resource <name>
   ```
-- Schema changes go through `prisma/schema.prisma` — edit the model, then:
+- Schema changes go through `src/prisma/contract.prisma` — edit the model, then:
   ```sh
-  npx prisma migrate dev --name <change>   # create + apply migration
+  npx prisma contract emit     # regenerate contract.json + contract.d.ts
+  npx prisma db update         # apply the contract change to the database
   ```
-- The generated Prisma client (`src/generated/`) is gitignored — run `npx prisma generate` after install or schema changes.
+- The emitted contract (`src/prisma/contract.json` + `contract.d.ts`) is committed to git — run `npx prisma contract emit` after schema changes.
 - Co-locate unit tests as `<name>.spec.ts` next to the source file.
 - Commands:
   ```sh
@@ -259,8 +260,8 @@ lending/
 │   ├── Dockerfile           # Development image
 │   └── Dockerfile.prod      # Production image
 ├── accounts-service/        # NestJS service
-│   ├── prisma/              # Prisma schema & migrations
-│   ├── src/                 # Application code (incl. generated Prisma client)
+│   ├── prisma.config.ts     # Prisma 8 CLI configuration
+│   ├── src/prisma/          # Contract source + emitted contract + db client
 │   ├── test/                # e2e tests
 │   ├── Dockerfile           # Development image
 │   └── Dockerfile.prod      # Production image
