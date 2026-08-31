@@ -1,14 +1,21 @@
 services:
   gateway-service:
-    build: ./gateway-service
+    build:
+      context: ./gateway-service
+      target: development
     ports:
       - "8080:8080"
     environment:
+      ASPNETCORE_ENVIRONMENT: Development
       Auth__Jwt__Key: ${JWT_KEY:-replace-me-with-a-secret-at-least-32-characters-long}
       Auth__Jwt__Issuer: lending-gateway
       Auth__Jwt__Audience: lending-services
       Auth__DevClient__ClientId: lending-client
       Auth__DevClient__ClientSecret: ${AUTH_CLIENT_SECRET:-change-me}
+    volumes:
+      - ./gateway-service:/src
+      - /src/bin
+      - /src/obj
     depends_on:
       accounts-service:
         condition: service_healthy
@@ -30,17 +37,24 @@ services:
       - lending-network
 
   accounts-service:
-    build: ./accounts-service
+    build:
+      context: ./accounts-service
+      target: development
     ports:
       - "3000:3000"
     environment:
       PORT: 3000
-      NODE_ENV: production
+      NODE_ENV: development
       DATABASE_URL: postgresql://lending:lending@postgres:5432/accounts
       RABBITMQ_URL: amqp://lending:lending@rabbitmq:5672
       JWT_KEY: ${JWT_KEY:-replace-me-with-a-secret-at-least-32-characters-long}
       JWT_ISSUER: lending-gateway
       JWT_AUDIENCE: lending-services
+    volumes:
+      - ./accounts-service:/app
+      - /app/node_modules
+      - /app/src/generated
+      - /app/dist
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
       interval: 10s
@@ -58,7 +72,9 @@ services:
       - lending-network
 
   loans-service:
-    build: ./loans-service
+    build:
+      context: ./loans-service
+      target: development
     ports:
       - "5120:8080"
     environment:
@@ -69,6 +85,10 @@ services:
       Auth__Jwt__Key: ${JWT_KEY:-replace-me-with-a-secret-at-least-32-characters-long}
       Auth__Jwt__Issuer: lending-gateway
       Auth__Jwt__Audience: lending-services
+    volumes:
+      - ./loans-service:/src
+      - /src/bin
+      - /src/obj
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 10s

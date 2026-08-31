@@ -95,13 +95,27 @@ Elasticsearch and RabbitMQ still use named volumes (`elasticsearch-data`, `rabbi
   sudo sysctl -w vm.max_map_count=262144
   ```
 
-### Run everything with Docker
+### Run everything with Docker (development)
 
 ```sh
 docker compose up --build
 ```
 
+This starts the full stack in development mode: each service runs its hot-reload watcher (`nest start --watch` for accounts-service, `dotnet watch run` for the .NET services) against bind-mounted source directories (`./accounts-service`, `./loans-service`, `./gateway-service`). Edits are picked up without rebuilding images. Container-only paths (`node_modules`, `src/generated`, `dist`, `bin`, `obj`) are kept isolated in anonymous volumes.
+
 Database schema is applied automatically on startup: loans-service runs EF Core migrations itself, while a one-shot `accounts-db-setup` container applies the Prisma schema (`npx prisma migrate deploy`) before accounts-service starts.
+
+### Production build
+
+Each service has a separate production image next to its dev `Dockerfile`:
+
+```sh
+docker build -f gateway-service/Dockerfile.prod -t gateway-service:prod gateway-service
+docker build -f accounts-service/Dockerfile.prod -t accounts-service:prod accounts-service
+docker build -f loans-service/Dockerfile.prod -t loans-service:prod loans-service
+```
+
+These build a Release/publish image (no watch mode, no source bind mounts).
 
 | Endpoint | URL |
 |---|---|
@@ -239,17 +253,20 @@ Create body: `accountId` (string, required), `principal` (number > 0), `interest
 
 ```
 lending/
-├── docker-compose.yml       # Full stack orchestration
+├── docker-compose.yml       # Dev stack orchestration (hot reload)
 ├── gateway-service/         # YARP API gateway (.NET 9)
 │   ├── appsettings.json     # Proxy routes & clusters
-│   └── Dockerfile
+│   ├── Dockerfile           # Development image
+│   └── Dockerfile.prod      # Production image
 ├── accounts-service/        # NestJS service
 │   ├── prisma/              # Prisma schema & migrations
 │   ├── src/                 # Application code (incl. generated Prisma client)
 │   ├── test/                # e2e tests
-│   └── Dockerfile
+│   ├── Dockerfile           # Development image
+│   └── Dockerfile.prod      # Production image
 └── loans-service/           # ASP.NET Core service
     ├── Controllers/         # API controllers
     ├── Program.cs
-    └── Dockerfile
+    ├── Dockerfile           # Development image
+    └── Dockerfile.prod      # Production image
 ```
