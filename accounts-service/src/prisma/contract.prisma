@@ -2,7 +2,7 @@ model Account {
   id        String              @id @default(uuid())
   name      String
   email     String              @unique
-  balance   Decimal            @default(0)
+  balance   Decimal            @default("0")
   createdAt TimestamptzString   @default(now()) @map("created_at")
   updatedAt temporal.updatedAtString() @map("updated_at")
 

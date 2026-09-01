@@ -6,6 +6,9 @@ coverage/
 .env
 .env.*
 
+# Prisma 8 (db init / db update local state)
+migrations/
+
 # .NET
 bin/
 obj/

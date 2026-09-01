@@ -76,7 +76,11 @@ export class AccountsService {
       eventType,
       occurredAt: new Date(),
       correlationId: this.correlationContext.correlationId,
-      data: { ...account },
+      data: {
+        ...account,
+        createdAt: new Date(account.createdAt).toISOString(),
+        updatedAt: new Date(account.updatedAt).toISOString(),
+      },
     };
     await this.amqpConnection.publish(
       ACCOUNT_EVENTS_EXCHANGE,
