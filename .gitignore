@@ -5,6 +5,7 @@ coverage/
 *.log
 .env
 .env.*
+!.env.example
 
 # Prisma 8 (db init / db update local state)
 migrations/

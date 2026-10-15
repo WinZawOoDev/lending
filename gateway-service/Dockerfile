@@ -1,5 +1,7 @@
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS development
 WORKDIR /src
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
 COPY *.csproj ./
 RUN dotnet restore
 COPY . .

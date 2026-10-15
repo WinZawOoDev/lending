@@ -91,7 +91,17 @@ public class LoanService(LoansDbContext context, ILogger<LoanService> logger) : 
 
         loan.Status = dto.Status;
         loan.UpdatedAt = DateTime.UtcNow;
-        await context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            logger.LogWarning(
+                "Concurrent update detected for loan {LoanId} (correlation {CorrelationId})",
+                loan.Id, CorrelationContext.CorrelationId);
+            return new LoanUpdateResult(LoanUpdateStatus.ConcurrencyConflict, loan);
+        }
 
         logger.LogInformation(
             "Updated loan {LoanId} status to {Status} (correlation {CorrelationId})",

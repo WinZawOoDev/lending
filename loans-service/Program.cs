@@ -1,5 +1,6 @@
 using loans_service.Consumers;
 using loans_service.Data;
+using loans_service.Health;
 using loans_service.Middleware;
 using loans_service.Search;
 using loans_service.Services;
@@ -17,7 +18,24 @@ builder.Services.AddDbContext<LoansDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 builder.Services.AddScoped<ILoanService, LoanService>();
 
-var jwtKey = builder.Configuration["Auth:Jwt:Key"] ?? throw new InvalidOperationException("Auth:Jwt:Key is missing.");
+const string PlaceholderJwtKey = "replace-me-with-a-secret-at-least-32-characters-long";
+
+var jwtKey = builder.Configuration["Auth:Jwt:Key"]
+    ?? throw new InvalidOperationException("Auth:Jwt:Key is missing.");
+if (jwtKey.Length < 32)
+{
+    throw new InvalidOperationException("Auth:Jwt:Key must be at least 32 characters long.");
+}
+if (!builder.Environment.IsDevelopment() && jwtKey == PlaceholderJwtKey)
+{
+    throw new InvalidOperationException(
+        "Auth:Jwt:Key is still the placeholder value. Replace it with a strong secret outside Development.");
+}
+var jwtIssuer = builder.Configuration["Auth:Jwt:Issuer"]
+    ?? throw new InvalidOperationException("Auth:Jwt:Issuer is missing.");
+var jwtAudience = builder.Configuration["Auth:Jwt:Audience"]
+    ?? throw new InvalidOperationException("Auth:Jwt:Audience is missing.");
+
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -27,18 +45,30 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = builder.Configuration["Auth:Jwt:Issuer"],
-            ValidAudience = builder.Configuration["Auth:Jwt:Audience"],
+            ValidIssuer = jwtIssuer,
+            ValidAudience = jwtAudience,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
         };
     });
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("lending.api", policy =>
+        policy.RequireAuthenticatedUser().RequireRole("lending.api"));
+});
 
 builder.Services.AddControllers();
-builder.Services.AddHealthChecks();
+
+// RFC 7807 responses for unhandled exceptions instead of bare 500s.
+builder.Services.AddProblemDetails();
+
+builder.Services.AddHealthChecks()
+    .AddCheck<PostgresHealthCheck>("postgres")
+    .AddCheck<ElasticsearchHealthCheck>("elasticsearch");
+
 builder.Services.AddHostedService<AccountEventsConsumer>();
 
-var elasticsearchUri = builder.Configuration["Elasticsearch:Uri"] ?? "http://localhost:9200";
+var elasticsearchUri = builder.Configuration["Elasticsearch:Uri"]
+    ?? throw new InvalidOperationException("Elasticsearch:Uri is missing.");
 builder.Services.AddSingleton(new ElasticsearchClient(new ElasticsearchClientSettings(new Uri(elasticsearchUri))));
 builder.Services.AddSingleton<AccountIndexer>();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
@@ -50,6 +80,31 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<LoansDbContext>();
     await db.Database.MigrateAsync();
+
+    // Bootstrap the Elasticsearch index with an explicit mapping. A few
+    // retries ride out a cold ES; if it stays down the consumer keeps
+    // working and will bootstrap on its next reconnect.
+    var indexer = scope.ServiceProvider.GetRequiredService<AccountIndexer>();
+    foreach (var attempt in Enumerable.Range(1, 3))
+    {
+        try
+        {
+            await indexer.EnsureIndexAsync(CancellationToken.None);
+            break;
+        }
+        catch (Exception ex)
+        {
+            if (attempt < 3)
+            {
+                app.Logger.LogWarning(ex, "Elasticsearch index bootstrap failed (attempt {Attempt}/3)", attempt);
+                await Task.Delay(TimeSpan.FromSeconds(5));
+            }
+            else
+            {
+                app.Logger.LogError(ex, "Elasticsearch index bootstrap failed after 3 attempts; continuing without index");
+            }
+        }
+    }
 }
 
 // Configure the HTTP request pipeline.
@@ -59,6 +114,9 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+app.UseExceptionHandler();
+app.UseStatusCodePages();
 
 app.UseCorrelationId();
 

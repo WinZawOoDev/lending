@@ -7,6 +7,7 @@ public enum LoanUpdateStatus
     Updated,
     NotFound,
     InvalidTransition,
+    ConcurrencyConflict,
 }
 
 public sealed record LoanUpdateResult(LoanUpdateStatus Status, Loan? Loan = null);

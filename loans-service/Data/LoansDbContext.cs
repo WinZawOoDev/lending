@@ -21,7 +21,15 @@ public class LoansDbContext(DbContextOptions<LoansDbContext> options) : DbContex
             entity.Property(l => l.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(20);
             entity.Property(l => l.CreatedAt).HasColumnName("created_at");
             entity.Property(l => l.UpdatedAt).HasColumnName("updated_at");
+
+            // Optimistic concurrency: Postgres system column. Concurrent
+            // status transitions fail with DbUpdateConcurrencyException
+            // instead of silently last-write-wins.
+            entity.Property<uint>("xmin").IsRowVersion();
+
             entity.HasIndex(l => l.AccountId);
+            entity.HasIndex(l => new { l.Status, l.CreatedAt })
+                .HasDatabaseName("ix_loans_status_created_at");
         });
     }
 }

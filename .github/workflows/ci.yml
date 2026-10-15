@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  accounts-service:
+    name: accounts-service (lint + test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: accounts-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: accounts-service/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+
+  dotnet:
+    name: dotnet (build + test)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        project: [gateway-service, loans-service]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+      - name: Build ${{ matrix.project }}
+        run: dotnet build --no-restore ${{ matrix.project }}
+      - name: Restore loans tests
+        if: matrix.project == 'loans-service'
+        run: dotnet restore loans-service.Tests
+      - name: Test loans-service
+        if: matrix.project == 'loans-service'
+        run: dotnet test --no-build loans-service.Tests
+
+  compose-config:
+    name: docker compose config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate compose file
+        run: |
+          cp .env.example .env
+          docker compose config --quiet

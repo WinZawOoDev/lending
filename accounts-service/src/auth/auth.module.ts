@@ -10,7 +10,12 @@ import { JwtAuthGuard } from './jwt-auth.guard';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_KEY'),
+        secret: configService.getOrThrow<string>('JWT_KEY'),
+        verifyOptions: {
+          issuer: configService.getOrThrow<string>('JWT_ISSUER'),
+          audience: configService.getOrThrow<string>('JWT_AUDIENCE'),
+          algorithms: ['HS256'],
+        },
       }),
     }),
   ],

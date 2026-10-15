@@ -61,9 +61,18 @@ namespace loans_service.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("Id");
 
                     b.HasIndex("AccountId");
+
+                    b.HasIndex("Status", "CreatedAt")
+                        .HasDatabaseName("ix_loans_status_created_at");
 
                     b.ToTable("loans", (string)null);
                 });

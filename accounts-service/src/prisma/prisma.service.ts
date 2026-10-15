@@ -7,10 +7,7 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   readonly db: Db;
 
   constructor(configService: ConfigService) {
-    const url =
-      configService.get<string>('DATABASE_URL') ??
-      'postgresql://lending:lending@localhost:5432/lending';
-    this.db = createDb(url);
+    this.db = createDb(configService.getOrThrow<string>('DATABASE_URL'));
   }
 
   async onModuleInit(): Promise<void> {

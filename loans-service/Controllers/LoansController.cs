@@ -7,7 +7,7 @@ using loans_service.Services;
 namespace loans_service.Controllers;
 
 [ApiController]
-[Authorize]
+[Authorize(Policy = "lending.api")]
 [Route("loans")]
 public class LoansController(ILoanService loanService) : ControllerBase
 {
@@ -18,7 +18,9 @@ public class LoansController(ILoanService loanService) : ControllerBase
         [FromQuery] LoanStatus? status = null,
         CancellationToken cancellationToken = default)
     {
-        page = Math.Max(page, 1);
+        // Clamp the upper bound as well: an unbounded page would overflow the
+        // Skip() offset multiplication and turn into a 500.
+        page = Math.Clamp(page, 1, 10_000);
         pageSize = Math.Clamp(pageSize, 1, 100);
 
         var result = await loanService.GetAllAsync(page, pageSize, status, cancellationToken);
@@ -59,6 +61,8 @@ public class LoansController(ILoanService loanService) : ControllerBase
             LoanUpdateStatus.NotFound => NotFound(),
             LoanUpdateStatus.InvalidTransition => Conflict(
                 new { message = $"Invalid status transition from '{result.Loan!.Status}' to '{dto.Status}'." }),
+            LoanUpdateStatus.ConcurrencyConflict => Conflict(
+                new { message = "The loan was modified concurrently. Reload and try again." }),
             _ => Ok(result.Loan),
         };
     }

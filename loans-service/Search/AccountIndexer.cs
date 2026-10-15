@@ -31,6 +31,38 @@ public class AccountIndexer
         _logger = logger;
     }
 
+    /// <summary>
+    /// Creates the accounts index with an explicit mapping if it does not
+    /// exist yet. Without this, dynamic mapping would map the decimal
+    /// Balance as a float and silently lose precision on monetary values.
+    /// </summary>
+    public async Task EnsureIndexAsync(CancellationToken cancellationToken)
+    {
+        var existsResponse = await _client.Indices.ExistsAsync(IndexName, cancellationToken);
+        if (existsResponse.Exists)
+        {
+            return;
+        }
+
+        var createResponse = await _client.Indices.CreateAsync(IndexName, descriptor => descriptor
+            .Mappings(mappings => mappings
+                .Properties(properties => properties
+                    .Keyword("id")
+                    .Keyword("email")
+                    .Text("name")
+                    .ScaledFloatNumber("balance", scaled => scaled.ScalingFactor(100))
+                    .Date("createdAt")
+                    .Date("updatedAt"))), cancellationToken);
+
+        if (!createResponse.IsSuccess())
+        {
+            throw new InvalidOperationException(
+                $"Failed to create index {IndexName}: {createResponse.DebugInformation}");
+        }
+
+        _logger.LogInformation("Created index {IndexName} with explicit mapping", IndexName);
+    }
+
     public async Task IndexAsync(AccountEventData account, CancellationToken cancellationToken)
     {
         var document = new AccountDocument
@@ -61,19 +93,21 @@ public class AccountIndexer
     {
         var response = await _client.DeleteAsync(IndexName, new Id(accountId), cancellationToken);
 
+        // A missing document is the expected outcome when the event replays or
+        // the document was never indexed, so it must be handled before the
+        // generic failure check (404 is not an error here).
+        if (response.Result == Result.NotFound)
+        {
+            _logger.LogDebug("Account {AccountId} was not present in {Index}; nothing to delete", accountId, IndexName);
+            return;
+        }
+
         if (!response.IsSuccess())
         {
             throw new InvalidOperationException(
                 $"Failed to delete account {accountId} from index: {response.DebugInformation}");
         }
 
-        if (response.Result == Result.NotFound)
-        {
-            _logger.LogDebug("Account {AccountId} was not present in {Index}", accountId, IndexName);
-        }
-        else
-        {
-            _logger.LogInformation("Deleted account {AccountId} from {Index}", accountId, IndexName);
-        }
+        _logger.LogInformation("Deleted account {AccountId} from {Index}", accountId, IndexName);
     }
 }
