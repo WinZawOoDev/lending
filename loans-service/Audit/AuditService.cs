@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Elastic.Clients.Elasticsearch;
 using Elastic.Clients.Elasticsearch.IndexLifecycleManagement;
 using Elastic.Clients.Elasticsearch.Mapping;
@@ -9,9 +10,11 @@ namespace loans_service.Audit;
 public class AuditService
 {
     public const string MutationIndex = "loan-audit";
-    public const string ViewIndex = "loan-view-audit";
     public const string ViewIlmPolicy = "loan-view-audit-retention";
+    // ILM rollover requires a numbered backing index and a rollover_alias.
+    public const string ViewBackingIndex = "loan-view-audit-000001";
     public const string ViewWriteAlias = "loan-view-audit-write";
+    public const string ViewReadAlias = "loan-view-audit-read";
 
     private readonly ElasticsearchClient _client;
     private readonly IHttpContextAccessor _httpContextAccessor;
@@ -35,12 +38,16 @@ public class AuditService
         object? after,
         CancellationToken cancellationToken)
     {
+        var user = _httpContextAccessor.HttpContext?.User;
+
         var entry = new AuditEntry
         {
             EventType = eventType,
             Aggregate = aggregate,
             AggregateId = aggregateId,
-            ActorId = _httpContextAccessor.HttpContext?.User.FindFirst("sub")?.Value,
+            // The JWT handler maps "sub" to NameIdentifier by default, so check both.
+            ActorId = user?.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                ?? user?.FindFirst("sub")?.Value,
             CorrelationId = CorrelationContext.CorrelationId,
             OccurredAt = DateTime.UtcNow,
             Before = before,
@@ -98,7 +105,7 @@ public class AuditService
         Query query = must.Count > 0 ? new BoolQuery { Must = must } : new MatchAllQuery();
 
         var response = await _client.SearchAsync<AuditEntry>(s => s
-            .Indices("loan-audit,loan-view-audit")
+            .Indices($"{MutationIndex},{ViewReadAlias}")
             .Query(query)
             .Sort(sort => sort
                 .Field("occurredAt", f => f.Order(SortOrder.Desc)))
@@ -181,29 +188,34 @@ public class AuditService
                 $"Failed to create ILM policy {ViewIlmPolicy}: {policyResponse.DebugInformation}");
         }
 
-        var exists = await _client.Indices.ExistsAsync(ViewIndex, cancellationToken);
+        // Checking the write alias also matches an existing backing index created by this code.
+        var exists = await _client.Indices.ExistsAsync(ViewWriteAlias, cancellationToken);
 
         if (exists.Exists)
         {
             return;
         }
 
-        var createResponse = await _client.Indices.CreateAsync<AuditEntry>(ViewIndex,
+        var createResponse = await _client.Indices.CreateAsync<AuditEntry>(ViewBackingIndex,
             c => c
                 .Mappings(m => m.Properties(Properties))
                 .Settings(s => s
                     .NumberOfShards(1)
                     .NumberOfReplicas(0)
-                    .Lifecycle(l => l.Name(ViewIlmPolicy)))
-                .Aliases(a => a.Add(ViewWriteAlias, al => al.IsWriteIndex(true))));
+                    .Lifecycle(l => l
+                        .Name(ViewIlmPolicy)
+                        .RolloverAlias(ViewWriteAlias)))
+                .Aliases(a => a
+                    .Add(ViewWriteAlias, al => al.IsWriteIndex(true))
+                    .Add(ViewReadAlias, _ => { })));
 
         if (!createResponse.IsSuccess())
         {
             throw new InvalidOperationException(
-                $"Failed to create audit index {ViewIndex}: {createResponse.DebugInformation}");
+                $"Failed to create audit index {ViewBackingIndex}: {createResponse.DebugInformation}");
         }
 
-        _logger.LogInformation("Created Elasticsearch index {Index}", ViewIndex);
+        _logger.LogInformation("Created Elasticsearch index {Index}", ViewBackingIndex);
     }
 
     private static Action<PropertiesDescriptor<AuditEntry>> Properties => p => p
