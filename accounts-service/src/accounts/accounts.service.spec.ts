@@ -81,6 +81,35 @@ describe('AccountsService', () => {
     });
   });
 
+  describe('view', () => {
+    it('should return the account and record account.viewed', async () => {
+      prisma.account.findUnique.mockResolvedValue(mockAccount);
+      const result = await service.view(mockAccount.id, 'actor-1');
+      expect(result).toEqual(mockAccount);
+      expect(auditService.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventType: 'account.viewed',
+          aggregateId: mockAccount.id,
+          actorId: 'actor-1',
+        }),
+      );
+    });
+
+    it('should record account.view.denied and throw when not found', async () => {
+      prisma.account.findUnique.mockResolvedValue(null);
+      await expect(service.view('missing-id', 'actor-1')).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(auditService.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventType: 'account.view.denied',
+          aggregateId: 'missing-id',
+          actorId: 'actor-1',
+        }),
+      );
+    });
+  });
+
   describe('findOne', () => {
     it('should return an account when found', async () => {
       prisma.account.findUnique.mockResolvedValue(mockAccount);

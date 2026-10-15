@@ -43,7 +43,20 @@ export class AccountsService {
   }
 
   async view(id: string, actorId?: string): Promise<Account> {
-    const account = await this.findOne(id);
+    const account = await this.prisma.account.findUnique({ where: { id } });
+    if (!account) {
+      await this.auditService.record({
+        eventType: 'account.view.denied',
+        aggregate: 'account',
+        aggregateId: id,
+        actorId,
+        correlationId: this.correlationContext.correlationId,
+        occurredAt: new Date(),
+        before: null,
+        after: { reason: 'not_found' },
+      });
+      throw new NotFoundException(`Account #${id} not found`);
+    }
     await this.auditService.record({
       eventType: 'account.viewed',
       aggregate: 'account',

@@ -12,7 +12,8 @@ export interface AuditEntry {
     | 'account.created'
     | 'account.updated'
     | 'account.deleted'
-    | 'account.viewed';
+    | 'account.viewed'
+    | 'account.view.denied';
   aggregate: 'account';
   aggregateId: string;
   actorId?: string | null;
@@ -62,7 +63,6 @@ export class AuditService implements OnModuleInit, OnModuleDestroy {
       index: AuditService.IndexName,
       id: crypto.randomUUID(),
       document,
-      refresh: 'wait_for',
     });
 
     this.logger.log(
