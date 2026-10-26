@@ -8,6 +8,18 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import type { Request } from 'express';
 
+export interface JwtUser {
+  sub?: string;
+  role?: string | string[];
+  [key: string]: unknown;
+}
+
+declare module 'express' {
+  interface Request {
+    user?: JwtUser;
+  }
+}
+
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
   constructor(
@@ -24,11 +36,12 @@ export class JwtAuthGuard implements CanActivate {
     }
 
     try {
-      await this.jwtService.verifyAsync(token, {
+      const payload = await this.jwtService.verifyAsync<JwtUser>(token, {
         secret: this.configService.get<string>('JWT_KEY'),
         issuer: this.configService.get<string>('JWT_ISSUER'),
         audience: this.configService.get<string>('JWT_AUDIENCE'),
       });
+      request.user = payload;
     } catch {
       throw new UnauthorizedException('Invalid or expired token.');
     }
