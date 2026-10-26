@@ -18,6 +18,9 @@ import { ACCOUNT_EVENTS_EXCHANGE } from '../accounts/events/account.event';
         defaultPublishOptions: {
           persistent: true,
         },
+        // Connect in the background so the API can start (and serve traffic)
+        // while the broker is down; publishes no-op until it returns.
+        connectionInitOptions: { wait: false, timeout: 10000, retries: 5 },
       }),
     }),
   ],

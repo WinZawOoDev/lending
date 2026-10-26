@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { AmqpConnection } from '@golevelup/nestjs-rabbitmq';
 import { PrismaService } from '../prisma/prisma.service';
 import { Account } from '../prisma/db';
@@ -10,6 +10,8 @@ import { ACCOUNT_EVENTS_EXCHANGE, AccountEvent } from './events/account.event';
 
 @Injectable()
 export class AccountsService {
+  private readonly logger = new Logger(AccountsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly amqpConnection: AmqpConnection,
@@ -152,11 +154,25 @@ export class AccountsService {
         updatedAt: new Date(account.updatedAt).toISOString(),
       },
     };
-    await this.amqpConnection.publish(
-      ACCOUNT_EVENTS_EXCHANGE,
-      eventType,
-      event,
-    );
+    try {
+      // The broker queues publishes while disconnected and never settles
+      // them, which would hang the request forever — bound the wait and
+      // degrade to dropping the event instead.
+      await Promise.race([
+        this.amqpConnection.publish(ACCOUNT_EVENTS_EXCHANGE, eventType, event),
+        new Promise<never>((_, reject) => {
+          const timer = setTimeout(
+            () => reject(new Error('publish timed out after 2s')),
+            2000,
+          );
+          timer.unref();
+        }),
+      ]);
+    } catch (err) {
+      this.logger.warn(
+        `Failed to publish ${eventType} event for account ${account.id} (correlation ${this.correlationContext.correlationId ?? 'n/a'}) — event dropped: ${err}`,
+      );
+    }
   }
 
   private toAuditPayload(account: Account): Record<string, unknown> {

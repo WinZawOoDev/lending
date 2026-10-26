@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -57,7 +58,10 @@ builder.Services.AddAuthorization(options =>
         policy.RequireAuthenticatedUser().RequireRole("lending.api"));
 });
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    // Accept documented string enum values (e.g. "status": "Active") in JSON.
+    .AddJsonOptions(o =>
+        o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
 // RFC 7807 responses for unhandled exceptions instead of bare 500s.
 builder.Services.AddProblemDetails();
