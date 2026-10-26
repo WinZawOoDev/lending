@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using loans_service.Audit;
 using loans_service.Data;
 using loans_service.Dtos;
 using loans_service.Middleware;
@@ -6,7 +7,10 @@ using loans_service.Models;
 
 namespace loans_service.Services;
 
-public class LoanService(LoansDbContext context, ILogger<LoanService> logger) : ILoanService
+public class LoanService(
+    LoansDbContext context,
+    ILogger<LoanService> logger,
+    AuditService auditService) : ILoanService
 {
     public async Task<PagedResult<Loan>> GetAllAsync(
         int page,
@@ -43,7 +47,25 @@ public class LoanService(LoansDbContext context, ILogger<LoanService> logger) : 
         if (loan is null)
         {
             logger.LogWarning("Loan {LoanId} not found (correlation {CorrelationId})", id, CorrelationContext.CorrelationId);
+
+            await auditService.RecordAsync(
+                "loan.view.denied",
+                "loan",
+                id.ToString(),
+                null,
+                new { reason = "not_found" },
+                cancellationToken);
+
+            return null;
         }
+
+        await auditService.RecordAsync(
+            "loan.viewed",
+            "loan",
+            loan.Id.ToString(),
+            null,
+            new { loan.Status, loan.Principal, loan.AccountId },
+            cancellationToken);
 
         return loan;
     }
@@ -69,6 +91,14 @@ public class LoanService(LoansDbContext context, ILogger<LoanService> logger) : 
             "Created loan {LoanId} for account {AccountId} with principal {Principal} (correlation {CorrelationId})",
             loan.Id, loan.AccountId, loan.Principal, CorrelationContext.CorrelationId);
 
+        await auditService.RecordAsync(
+            "loan.created",
+            "loan",
+            loan.Id.ToString(),
+            null,
+            loan,
+            cancellationToken);
+
         return loan;
     }
 
@@ -89,6 +119,8 @@ public class LoanService(LoansDbContext context, ILogger<LoanService> logger) : 
             return new LoanUpdateResult(LoanUpdateStatus.InvalidTransition, loan);
         }
 
+        var before = new { loan.Status, loan.UpdatedAt };
+
         loan.Status = dto.Status;
         loan.UpdatedAt = DateTime.UtcNow;
         try
@@ -106,6 +138,14 @@ public class LoanService(LoansDbContext context, ILogger<LoanService> logger) : 
         logger.LogInformation(
             "Updated loan {LoanId} status to {Status} (correlation {CorrelationId})",
             loan.Id, loan.Status, CorrelationContext.CorrelationId);
+
+        await auditService.RecordAsync(
+            "loan.updated",
+            "loan",
+            loan.Id.ToString(),
+            before,
+            loan,
+            cancellationToken);
 
         return new LoanUpdateResult(LoanUpdateStatus.Updated, loan);
     }
@@ -125,6 +165,14 @@ public class LoanService(LoansDbContext context, ILogger<LoanService> logger) : 
         logger.LogInformation(
             "Deleted loan {LoanId} for account {AccountId} (correlation {CorrelationId})",
             loan.Id, loan.AccountId, CorrelationContext.CorrelationId);
+
+        await auditService.RecordAsync(
+            "loan.deleted",
+            "loan",
+            loan.Id.ToString(),
+            loan,
+            null,
+            cancellationToken);
 
         return true;
     }

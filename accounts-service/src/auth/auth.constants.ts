@@ -5,6 +5,11 @@
 export const LENDING_API_ROLE = 'lending.api';
 
 /**
+ * Role allowed to query audit trails. Issued by the gateway on request.
+ */
+export const ADMIN_ROLE = 'admin';
+
+/**
  * Claim names under which the gateway may encode roles. .NET's
  * JwtSecurityTokenHandler maps `ClaimTypes.Role` to the short `role` claim
  * on write; the full URI form is accepted for robustness.

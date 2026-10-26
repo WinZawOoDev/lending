@@ -10,6 +10,7 @@ import { CorrelationContextModule } from './common/correlation-context.module';
 import { AuthModule } from './auth/auth.module';
 import { MessagingModule } from './messaging/messaging.module';
 import { validateEnv } from './config/env.validation';
+import { AuditModule } from './common/audit/audit.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { validateEnv } from './config/env.validation';
     CorrelationContextModule,
     MessagingModule,
     AuthModule,
+    AuditModule,
     AccountsModule,
     HealthModule,
   ],

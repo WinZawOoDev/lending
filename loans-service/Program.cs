@@ -3,6 +3,7 @@ using loans_service.Data;
 using loans_service.Health;
 using loans_service.Middleware;
 using loans_service.Search;
+using loans_service.Audit;
 using loans_service.Services;
 using Elastic.Clients.Elasticsearch;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -71,6 +72,8 @@ var elasticsearchUri = builder.Configuration["Elasticsearch:Uri"]
     ?? throw new InvalidOperationException("Elasticsearch:Uri is missing.");
 builder.Services.AddSingleton(new ElasticsearchClient(new ElasticsearchClientSettings(new Uri(elasticsearchUri))));
 builder.Services.AddSingleton<AccountIndexer>();
+builder.Services.AddSingleton<AuditService>();
+builder.Services.AddHttpContextAccessor();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
@@ -105,6 +108,11 @@ using (var scope = app.Services.CreateScope())
             }
         }
     }
+
+    // Audit indexes use the same fail-soft semantics: bounded retries with
+    // backoff, then continue booting; audit writes self-heal the indexes later.
+    var audit = scope.ServiceProvider.GetRequiredService<AuditService>();
+    await audit.EnsureOnStartupAsync(CancellationToken.None);
 }
 
 // Configure the HTTP request pipeline.

@@ -3,6 +3,7 @@ import { Test } from '@nestjs/testing';
 import { AmqpConnection } from '@golevelup/nestjs-rabbitmq';
 import { PrismaService } from '../prisma/prisma.service';
 import { CorrelationContextService } from '../common/correlation-context.service';
+import { AuditService } from '../common/audit/audit.service';
 import { AccountsService } from './accounts.service';
 import { ACCOUNT_EVENTS_EXCHANGE } from './events/account.event';
 
@@ -40,6 +41,7 @@ describe('AccountsService', () => {
     };
   };
   let amqpConnection: { publish: jest.Mock };
+  let auditService: { record: jest.Mock };
 
   beforeEach(async () => {
     collection = {
@@ -61,12 +63,14 @@ describe('AccountsService', () => {
       },
     };
     amqpConnection = { publish: jest.fn() };
+    auditService = { record: jest.fn() };
 
     const moduleRef = await Test.createTestingModule({
       providers: [
         AccountsService,
         { provide: PrismaService, useValue: prisma },
         { provide: AmqpConnection, useValue: amqpConnection },
+        { provide: AuditService, useValue: auditService },
         CorrelationContextService,
       ],
     }).compile();
@@ -103,6 +107,35 @@ describe('AccountsService', () => {
   describe('findAll', () => {
     it('should return all accounts', async () => {
       expect(await service.findAll()).toEqual([mockAccount]);
+    });
+  });
+
+  describe('view', () => {
+    it('should return the account and record account.viewed', async () => {
+      collection.first.mockResolvedValue(mockAccount);
+      const result = await service.view(mockAccount.id, 'actor-1');
+      expect(result).toEqual(mockAccount);
+      expect(auditService.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventType: 'account.viewed',
+          aggregateId: mockAccount.id,
+          actorId: 'actor-1',
+        }),
+      );
+    });
+
+    it('should record account.view.denied and throw when not found', async () => {
+      collection.first.mockResolvedValue(null);
+      await expect(service.view('missing-id', 'actor-1')).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(auditService.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventType: 'account.view.denied',
+          aggregateId: 'missing-id',
+          actorId: 'actor-1',
+        }),
+      );
     });
   });
 

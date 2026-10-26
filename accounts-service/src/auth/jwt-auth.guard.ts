@@ -11,7 +11,19 @@ import type { Request } from 'express';
 import { LENDING_API_ROLE, ROLE_CLAIM_KEYS } from './auth.constants';
 
 export interface AuthenticatedRequest extends Request {
-  user?: JwtPayload;
+  user?: JwtUser;
+}
+
+export interface JwtUser {
+  sub?: string;
+  role?: string | string[];
+  [key: string]: unknown;
+}
+
+declare module 'express' {
+  interface Request {
+    user?: JwtUser;
+  }
 }
 
 @Injectable()

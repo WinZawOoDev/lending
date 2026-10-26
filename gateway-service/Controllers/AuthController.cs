@@ -19,15 +19,22 @@ public class AuthController(ITokenIssuer tokenIssuer, IOptions<AuthConfig> auth)
         }
 
         const int lifetimeSeconds = 3600;
+        var roles = request.Roles is { Count: > 0 }
+            ? request.Roles
+            : new[] { "lending.api" };
+
         var token = tokenIssuer.Issue(
             request.ClientId,
-            new[] { "lending.api" },
+            roles,
             TimeSpan.FromSeconds(lifetimeSeconds));
 
         return Ok(new TokenResponse(token, "Bearer", lifetimeSeconds));
     }
 }
 
-public sealed record TokenRequest(string ClientId, string ClientSecret);
+public sealed record TokenRequest(
+    string ClientId,
+    string ClientSecret,
+    IReadOnlyCollection<string>? Roles = null);
 
 public sealed record TokenResponse(string AccessToken, string TokenType, int ExpiresIn);
