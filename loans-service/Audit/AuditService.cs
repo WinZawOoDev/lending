@@ -16,6 +16,10 @@ public class AuditService
     public const string ViewWriteAlias = "loan-view-audit-write";
     public const string ViewReadAlias = "loan-view-audit-read";
 
+    private const int StartupAttempts = 8;
+    private const int RetryBaseDelayMs = 1000;
+    private const int RetryMaxDelayMs = 15000;
+
     private readonly ElasticsearchClient _client;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ILogger<AuditService> _logger;
@@ -57,20 +61,67 @@ public class AuditService
         var isView = eventType is "loan.viewed" or "loan.view.denied";
         var index = isView ? ViewWriteAlias : MutationIndex;
 
-        var response = await _client.IndexAsync(
+        // Audit is fail-open: Elasticsearch problems are logged but never fail
+        // the audited request, which has already committed its own state.
+        if (await WriteAsync(entry, index, cancellationToken))
+        {
+            _logger.LogInformation(
+                "Recorded {EventType} for {Aggregate} {AggregateId} (correlation {CorrelationId})",
+                eventType, aggregate, aggregateId, entry.CorrelationId);
+        }
+        else
+        {
+            _logger.LogError(
+                "Failed to record audit entry {EventType} for {Aggregate} {AggregateId} (correlation {CorrelationId}) — audit is degraded, the request continues",
+                eventType, aggregate, aggregateId, entry.CorrelationId);
+        }
+    }
+
+    private async Task<bool> WriteAsync(AuditEntry entry, string index, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await IndexAsync(entry, index, cancellationToken);
+            if (response.IsSuccess())
+            {
+                return true;
+            }
+
+            // A missing index is self-healed by recreating it and retrying once.
+            if (response.ElasticsearchServerError?.Error?.Type == "index_not_found_exception")
+            {
+                await EnsureIndexAsync(cancellationToken);
+
+                response = await IndexAsync(entry, index, cancellationToken);
+                if (response.IsSuccess())
+                {
+                    _logger.LogWarning(
+                        "Audit index was missing — recreated it and flushed the pending entry");
+                    return true;
+                }
+            }
+
+            _logger.LogError(
+                "Audit write to Elasticsearch failed: {DebugInformation}",
+                response.DebugInformation);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Audit write to Elasticsearch failed: {EventType} for {Aggregate} {AggregateId}",
+                entry.EventType, entry.Aggregate, entry.AggregateId);
+            return false;
+        }
+    }
+
+    private async Task<IndexResponse> IndexAsync(AuditEntry entry, string index, CancellationToken cancellationToken)
+    {
+        return await _client.IndexAsync(
             entry,
             i => i.Index(index).Id(Guid.NewGuid().ToString()),
             cancellationToken);
-
-        if (!response.IsSuccess())
-        {
-            throw new InvalidOperationException(
-                $"Failed to record audit entry for {aggregate} {aggregateId}: {response.DebugInformation}");
-        }
-
-        _logger.LogInformation(
-            "Recorded {EventType} for {Aggregate} {AggregateId} (correlation {CorrelationId})",
-            eventType, aggregate, aggregateId, entry.CorrelationId);
     }
 
     public async Task<(IReadOnlyList<AuditEntry> Hits, long Total)> SearchAsync(
@@ -120,6 +171,37 @@ public class AuditService
         }
 
         return (response.Hits.Select(h => h.Source).Where(h => h is not null).Cast<AuditEntry>().ToList(), response.Total);
+    }
+
+    // Startup path: retry with backoff and continue booting when Elasticsearch
+    // stays unavailable; audit writes self-heal the index once it returns.
+    public async Task EnsureOnStartupAsync(CancellationToken cancellationToken)
+    {
+        for (var attempt = 1; attempt <= StartupAttempts; attempt++)
+        {
+            try
+            {
+                await EnsureIndexAsync(cancellationToken);
+                return;
+            }
+            catch (Exception ex) when (attempt < StartupAttempts)
+            {
+                var delay = Math.Min(RetryBaseDelayMs * (int)Math.Pow(2, attempt - 1), RetryMaxDelayMs);
+                _logger.LogWarning(
+                    ex,
+                    "Elasticsearch not ready (attempt {Attempt}/{MaxAttempts}), retrying in {Delay}ms",
+                    attempt, StartupAttempts, delay);
+                await Task.Delay(delay, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(
+                    ex,
+                    "Elasticsearch unavailable after {MaxAttempts} attempts — continuing without the audit indexes. Audit entries will be dropped until the indexes exist.",
+                    StartupAttempts);
+                return;
+            }
+        }
     }
 
     public async Task EnsureIndexAsync(CancellationToken cancellationToken)

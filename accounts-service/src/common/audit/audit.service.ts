@@ -5,7 +5,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Client } from '@elastic/elasticsearch';
+import { Client, errors } from '@elastic/elasticsearch';
 
 export interface AuditEntry {
   eventType:
@@ -32,6 +32,10 @@ export interface AuditSearchParams {
   pageSize?: number;
 }
 
+const STARTUP_ATTEMPTS = 8;
+const RETRY_BASE_DELAY_MS = 1000;
+const RETRY_MAX_DELAY_MS = 15000;
+
 @Injectable()
 export class AuditService implements OnModuleInit, OnModuleDestroy {
   public static readonly IndexName = 'account-audit';
@@ -46,7 +50,30 @@ export class AuditService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleInit(): Promise<void> {
-    await this.ensureIndex();
+    // The app must boot even when Elasticsearch is unavailable: audit is
+    // degraded (entries are dropped and logged) rather than taking the API down.
+    for (let attempt = 1; attempt <= STARTUP_ATTEMPTS; attempt++) {
+      try {
+        await this.ensureIndex();
+        return;
+      } catch (err) {
+        if (attempt === STARTUP_ATTEMPTS) {
+          this.logger.error(
+            `Elasticsearch unavailable after ${STARTUP_ATTEMPTS} attempts — continuing without the audit index. Audit entries will be dropped until the index is created.`,
+          );
+          return;
+        }
+
+        const delay = Math.min(
+          RETRY_BASE_DELAY_MS * 2 ** (attempt - 1),
+          RETRY_MAX_DELAY_MS,
+        );
+        this.logger.warn(
+          `Elasticsearch not ready (attempt ${attempt}/${STARTUP_ATTEMPTS}), retrying in ${delay}ms: ${err}`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
   }
 
   async onModuleDestroy(): Promise<void> {
@@ -59,15 +86,51 @@ export class AuditService implements OnModuleInit, OnModuleDestroy {
       occurredAt: entry.occurredAt.toISOString(),
     };
 
-    await this.client.index({
-      index: AuditService.IndexName,
-      id: crypto.randomUUID(),
-      document,
-    });
+    if (await this.tryWrite(document)) {
+      this.logger.log(
+        `Recorded ${entry.eventType} for ${entry.aggregate} ${entry.aggregateId} (correlation ${entry.correlationId ?? 'n/a'})`,
+      );
+      return;
+    }
 
-    this.logger.log(
-      `Recorded ${entry.eventType} for ${entry.aggregate} ${entry.aggregateId} (correlation ${entry.correlationId ?? 'n/a'})`,
+    this.logger.error(
+      `Failed to record audit entry ${entry.eventType} for ${entry.aggregate} ${entry.aggregateId} (correlation ${entry.correlationId ?? 'n/a'}) — audit is degraded, the request continues`,
     );
+  }
+
+  private async tryWrite(document: Record<string, unknown>): Promise<boolean> {
+    try {
+      await this.client.index({
+        index: AuditService.IndexName,
+        id: crypto.randomUUID(),
+        document,
+      });
+      return true;
+    } catch (err) {
+      // A missing index is self-healed by recreating it and retrying once.
+      if (err instanceof errors.ResponseError && err.statusCode === 404) {
+        try {
+          await this.ensureIndex();
+          await this.client.index({
+            index: AuditService.IndexName,
+            id: crypto.randomUUID(),
+            document,
+          });
+          this.logger.warn(
+            'Audit index was missing — recreated it and flushed the pending entry',
+          );
+          return true;
+        } catch (retryErr) {
+          this.logger.error(
+            `Audit write to Elasticsearch failed after index recreation: ${retryErr}`,
+          );
+          return false;
+        }
+      }
+
+      this.logger.error(`Audit write to Elasticsearch failed: ${err}`);
+      return false;
+    }
   }
 
   async search(

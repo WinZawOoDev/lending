@@ -55,7 +55,7 @@ using (var scope = app.Services.CreateScope())
     await db.Database.MigrateAsync();
 
     var audit = scope.ServiceProvider.GetRequiredService<AuditService>();
-    await audit.EnsureIndexAsync(CancellationToken.None);
+    await audit.EnsureOnStartupAsync(CancellationToken.None);
 }
 
 // Configure the HTTP request pipeline.
