@@ -5,7 +5,7 @@ using loans_service.Audit;
 namespace loans_service.Controllers;
 
 [ApiController]
-[Authorize(Roles = "admin")]
+[Authorize(Policy = "lending.api", Roles = "admin")]
 [Route("audit")]
 public class AuditController(AuditService auditService) : ControllerBase
 {
